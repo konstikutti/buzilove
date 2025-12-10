@@ -54,29 +54,27 @@ import {
   Square,
   BoxSelect,
   Columns,
-  ArrowUp,
-  ArrowDown,
-  ArrowRight,
+  ArrowRight as ArrowRightIcon,
   Database,
+  ArrowLeft as ArrowLeftIcon,
   ZoomIn,
   X,
   Camera,
+  Move,
 } from "lucide-react";
 
 // --- Firebase Konfiguration ---
-// TRAGE HIER DEINE ECHTEN DATEN EIN:
+// WICHTIG: Ersetze dies mit deinen ECHTEN Daten von der Firebase-Konsole
 const firebaseConfig = {
-  apiKey: "AIzaSyAB1iMD8eqVJIgFOW5OLJP0v3SPF02RIVc",
-  authDomain: "buzi-tagebuch.firebaseapp.com",
-  projectId: "buzi-tagebuch",
-  storageBucket: "buzi-tagebuch.firebasestorage.app",
-  messagingSenderId: "1090406194300",
-  appId: "1:1090406194300:web:f48ff12c0ec1248a2d3df9",
-  measurementId: "G-5R85SV3KXC",
+  apiKey: "DEIN_API_KEY",
+  authDomain: "dein-projekt.firebaseapp.com",
+  projectId: "dein-projekt",
+  storageBucket: "dein-projekt.firebasestorage.app",
+  messagingSenderId: "123456789",
+  appId: "1:123456789:web:abcdef",
 };
 
 // --- Firebase Initialisierung ---
-// Wir prüfen erst, ob die Config echt ist, um Fehler zu vermeiden
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -100,8 +98,8 @@ const BG_STYLES = [
   { id: "mesh", name: "Mesh", desc: "Nebel" },
 ];
 
-// --- Helfer: Bildkomprimierung ---
-const compressImage = (file, maxWidth = 800, quality = 0.7) => {
+// --- Helfer: Bildkomprimierung (High Quality Update) ---
+const compressImage = (file, maxWidth = 1920, quality = 0.85) => {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -110,16 +108,20 @@ const compressImage = (file, maxWidth = 800, quality = 0.7) => {
       img.src = event.target.result;
       img.onload = () => {
         const canvas = document.createElement("canvas");
-        const scaleSize = maxWidth / img.width;
-        if (scaleSize < 1) {
-          canvas.width = maxWidth;
-          canvas.height = img.height * scaleSize;
-        } else {
-          canvas.width = img.width;
-          canvas.height = img.height;
+        let width = img.width;
+        let height = img.height;
+
+        // Nur verkleinern, wenn größer als maxWidth
+        if (width > maxWidth) {
+          const scaleSize = maxWidth / width;
+          width = maxWidth;
+          height = height * scaleSize;
         }
+
+        canvas.width = width;
+        canvas.height = height;
         const ctx = canvas.getContext("2d");
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, width, height);
         resolve(canvas.toDataURL("image/jpeg", quality));
       };
     };
@@ -260,78 +262,90 @@ const Input = ({
   </div>
 );
 
-// --- Sub-Components for Editor ---
+// --- DRAGGABLE IMAGE COMPONENT (NEU) ---
+const DraggableImage = ({
+  src,
+  position = "center",
+  onPositionChange,
+  className,
+}) => {
+  const imgRef = useRef(null);
+  const [isDragging, setIsDragging] = useState(false);
 
-const ImageSelector = ({ current, onSelect, images }) => (
-  <div className="flex gap-2 mb-2 overflow-x-auto pb-2 scrollbar-thin">
-    {images && images.length > 0 ? (
-      images.map((img, i) => (
-        <div
-          key={i}
-          onClick={() => onSelect(img)}
-          className={`w-10 h-10 flex-shrink-0 rounded-md overflow-hidden cursor-pointer border-2 transition-all ${
-            current === img
-              ? "border-indigo-500 ring-2 ring-indigo-200"
-              : "border-transparent"
-          }`}
-        >
-          <img src={img} className="w-full h-full object-cover" />
+  // Parse initial position or default to 50% 50%
+  const getPos = () => {
+    if (!position || position === "center") return { x: 50, y: 50 };
+    const parts = position.split(" ");
+    if (parts.length === 2)
+      return { x: parseFloat(parts[0]), y: parseFloat(parts[1]) };
+    return { x: 50, y: 50 };
+  };
+
+  const handleMouseDown = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDragging || !imgRef.current) return;
+
+    const rect = imgRef.current.getBoundingClientRect();
+    // Calculate percentages based on mouse movement relative to image container
+    // Inverted logic: moving mouse right moves image "view" right (showing left part) ??
+    // Actually for object-position: moving to 0% shows left edge.
+    // Let's implement direct mapping: Mouse at left edge = 0%, Right = 100%
+
+    let x = ((e.clientX - rect.left) / rect.width) * 100;
+    let y = ((e.clientY - rect.top) / rect.height) * 100;
+
+    // Clamp values
+    x = Math.max(0, Math.min(100, x));
+    y = Math.max(0, Math.min(100, y));
+
+    onPositionChange(`${x.toFixed(1)}% ${y.toFixed(1)}%`);
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  useEffect(() => {
+    if (isDragging) {
+      window.addEventListener("mouseup", handleMouseUp);
+      window.addEventListener("mousemove", handleMouseMove);
+    } else {
+      window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("mousemove", handleMouseMove);
+    }
+    return () => {
+      window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("mousemove", handleMouseMove);
+    };
+  }, [isDragging]);
+
+  return (
+    <div
+      className={`relative overflow-hidden cursor-move group ${className}`}
+      ref={imgRef}
+      onMouseDown={handleMouseDown}
+    >
+      <img
+        src={src}
+        className="w-full h-full object-cover pointer-events-none"
+        style={{ objectPosition: position }}
+        alt=""
+      />
+      {/* Overlay hint */}
+      <div
+        className={`absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none`}
+      >
+        <div className="bg-black/50 text-white text-[10px] px-2 py-1 rounded flex items-center gap-1">
+          <Move size={12} /> Ziehen zum Ausrichten
         </div>
-      ))
-    ) : (
-      <span className="text-xs text-slate-400">Keine Fotos verfügbar.</span>
-    )}
-  </div>
-);
-
-const FocusSelector = ({ value, onChange, label }) => (
-  <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-md p-1 shadow-sm mt-1">
-    <span className="text-[10px] text-slate-400 font-bold uppercase px-1">
-      {label || "Fokus"}
-    </span>
-    <button
-      onClick={() => onChange("top")}
-      className={`p-1 rounded ${
-        value === "top" ? "bg-indigo-100 text-indigo-600" : "text-slate-400"
-      }`}
-    >
-      <ArrowUp size={12} />
-    </button>
-    <button
-      onClick={() => onChange("center")}
-      className={`p-1 rounded ${
-        value === "center" ? "bg-indigo-100 text-indigo-600" : "text-slate-400"
-      }`}
-    >
-      <BoxSelect size={12} />
-    </button>
-    <button
-      onClick={() => onChange("bottom")}
-      className={`p-1 rounded ${
-        value === "bottom" ? "bg-indigo-100 text-indigo-600" : "text-slate-400"
-      }`}
-    >
-      <ArrowDown size={12} />
-    </button>
-    <div className="w-px h-3 bg-slate-200 mx-0.5"></div>
-    <button
-      onClick={() => onChange("left")}
-      className={`p-1 rounded ${
-        value === "left" ? "bg-indigo-100 text-indigo-600" : "text-slate-400"
-      }`}
-    >
-      <ArrowLeft size={12} />
-    </button>
-    <button
-      onClick={() => onChange("right")}
-      className={`p-1 rounded ${
-        value === "right" ? "bg-indigo-100 text-indigo-600" : "text-slate-400"
-      }`}
-    >
-      <ArrowRight size={12} />
-    </button>
-  </div>
-);
+      </div>
+    </div>
+  );
+};
 
 // --- EDITOR & VIEWER ---
 
@@ -348,8 +362,8 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
         align: "left",
         layout: "center",
         imgStyle: "rounded",
-        focus: "center",
-        focus2: "center",
+        focus: "50% 50%",
+        focus2: "50% 50%",
       },
     ]);
   const updateBlock = (id, upd) =>
@@ -364,6 +378,27 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
       [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
     onChange(arr);
   };
+
+  const ImageSelector = ({ current, onSelect }) => (
+    <div className="flex gap-2 mb-2 overflow-x-auto pb-2 scrollbar-thin">
+      {uploadedImages.map((img, i) => (
+        <div
+          key={i}
+          onClick={() => onSelect(img)}
+          className={`w-10 h-10 flex-shrink-0 rounded-md overflow-hidden cursor-pointer border-2 transition-all ${
+            current === img
+              ? "border-indigo-500 ring-2 ring-indigo-200"
+              : "border-transparent"
+          }`}
+        >
+          <img src={img} className="w-full h-full object-cover" />
+        </div>
+      ))}
+      {uploadedImages.length === 0 && (
+        <span className="text-xs text-slate-400">Keine Fotos verfügbar.</span>
+      )}
+    </div>
+  );
 
   return (
     <div className="space-y-4">
@@ -514,7 +549,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
               onChange={(e) =>
                 updateBlock(block.id, { content: e.target.value })
               }
-              placeholder="Text..."
+              placeholder="Erzähl die Story..."
               className={`w-full min-h-[80px] bg-transparent border-none focus:ring-0 resize-none px-0 text-${block.align}`}
             />
           )}
@@ -525,7 +560,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                 onChange={(e) =>
                   updateBlock(block.id, { content: e.target.value })
                 }
-                placeholder="Zitat..."
+                placeholder="Insider / Zitat..."
                 className="w-full bg-transparent italic text-lg border-none focus:ring-0 text-center"
               />
             </div>
@@ -542,7 +577,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                 onChange={(e) =>
                   updateBlock(block.id, { content: e.target.value })
                 }
-                placeholder="Notiz..."
+                placeholder="Randnotiz..."
                 className="w-full bg-transparent text-amber-900 border-none focus:ring-0 text-sm"
               />
             </div>
@@ -556,26 +591,17 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
               <ImageSelector
                 current={block.content}
                 onSelect={(img) => updateBlock(block.id, { content: img })}
-                images={uploadedImages}
               />
               {block.content && (
                 <div className="flex flex-col gap-2 mt-2 bg-slate-50 p-2 rounded">
-                  <div className="flex gap-2 items-center">
-                    <img
-                      src={block.content}
-                      className="h-16 w-16 object-cover rounded"
-                      style={{ objectPosition: block.focus || "center" }}
-                    />
-                    <div className="flex-1">
-                      <FocusSelector
-                        value={block.focus || "center"}
-                        onChange={(pos) =>
-                          updateBlock(block.id, { focus: pos })
-                        }
-                        label="Fokus"
-                      />
-                    </div>
-                  </div>
+                  <DraggableImage
+                    src={block.content}
+                    position={block.focus || "50% 50%"}
+                    onPositionChange={(pos) =>
+                      updateBlock(block.id, { focus: pos })
+                    }
+                    className="h-48 w-full rounded border border-slate-200"
+                  />
                   <input
                     value={block.caption || ""}
                     onChange={(e) =>
@@ -598,23 +624,20 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                 <ImageSelector
                   current={block.content}
                   onSelect={(img) => updateBlock(block.id, { content: img })}
-                  images={uploadedImages}
                 />
                 {block.content ? (
                   <div className="mt-2">
-                    <img
+                    <DraggableImage
                       src={block.content}
-                      className="h-20 w-full object-cover rounded"
-                      style={{ objectPosition: block.focus || "center" }}
-                    />
-                    <FocusSelector
-                      value={block.focus || "center"}
-                      onChange={(pos) => updateBlock(block.id, { focus: pos })}
-                      label="Fokus"
+                      position={block.focus || "50% 50%"}
+                      onPositionChange={(pos) =>
+                        updateBlock(block.id, { focus: pos })
+                      }
+                      className="h-32 w-full rounded border border-slate-200"
                     />
                   </div>
                 ) : (
-                  <div className="h-20 flex items-center justify-center border-dashed border-2 rounded text-slate-300">
+                  <div className="h-32 flex items-center justify-center border-dashed border-2 rounded text-slate-300">
                     <ImageIcon />
                   </div>
                 )}
@@ -626,23 +649,20 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                 <ImageSelector
                   current={block.content2}
                   onSelect={(img) => updateBlock(block.id, { content2: img })}
-                  images={uploadedImages}
                 />
                 {block.content2 ? (
                   <div className="mt-2">
-                    <img
+                    <DraggableImage
                       src={block.content2}
-                      className="h-20 w-full object-cover rounded"
-                      style={{ objectPosition: block.focus2 || "center" }}
-                    />
-                    <FocusSelector
-                      value={block.focus2 || "center"}
-                      onChange={(pos) => updateBlock(block.id, { focus2: pos })}
-                      label="Fokus"
+                      position={block.focus2 || "50% 50%"}
+                      onPositionChange={(pos) =>
+                        updateBlock(block.id, { focus2: pos })
+                      }
+                      className="h-32 w-full rounded border border-slate-200"
                     />
                   </div>
                 ) : (
-                  <div className="h-20 flex items-center justify-center border-dashed border-2 rounded text-slate-300">
+                  <div className="h-32 flex items-center justify-center border-dashed border-2 rounded text-slate-300">
                     <ImageIcon />
                   </div>
                 )}
@@ -719,7 +739,8 @@ const ImageManager = ({ images, onChange }) => {
     setLoading(true);
     const newImgs = [];
     for (const f of files) {
-      const data = await compressImage(f, 800, 0.7);
+      // High quality for uploads
+      const data = await compressImage(f, 1920, 0.85);
       newImgs.push(data);
     }
     onChange([...images, ...newImgs]);
@@ -747,25 +768,24 @@ const ImageManager = ({ images, onChange }) => {
           <Upload className="text-slate-400 mb-2" />
         )}
         <span className="text-sm font-medium text-slate-600">
-          {loading ? "Verarbeite..." : "Fotos hochladen"}
+          {loading ? "Verarbeite..." : "Fotos hochladen (High Quality)"}
         </span>
       </div>
       <div className="grid grid-cols-3 gap-2">
-        {images &&
-          images.map((img, i) => (
-            <div
-              key={i}
-              className="relative group aspect-square rounded-lg overflow-hidden bg-slate-100"
+        {images.map((img, i) => (
+          <div
+            key={i}
+            className="relative group aspect-square rounded-lg overflow-hidden bg-slate-100"
+          >
+            <img src={img} className="w-full h-full object-cover" />
+            <button
+              onClick={() => onChange(images.filter((_, idx) => idx !== i))}
+              className="absolute top-1 right-1 bg-white p-1 rounded-full shadow opacity-0 group-hover:opacity-100"
             >
-              <img src={img} className="w-full h-full object-cover" />
-              <button
-                onClick={() => onChange(images.filter((_, idx) => idx !== i))}
-                className="absolute top-1 right-1 bg-white p-1 rounded-full shadow opacity-0 group-hover:opacity-100"
-              >
-                <X size={12} />
-              </button>
-            </div>
-          ))}
+              <X size={12} />
+            </button>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -788,9 +808,9 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
     let classes = "my-6 relative ";
     let imgStyle = "w-full object-cover ";
     if (layout === "full") {
-      classes +=
-        "w-full -mx-6 md:-mx-12 width-[calc(100%+3rem)] block clear-both";
-      imgStyle += "rounded-none h-[400px]";
+      // FIX MOBILE: Only break out on md screens or larger
+      classes += "w-full md:-mx-12 md:width-[calc(100%+3rem)] block clear-both";
+      imgStyle += "rounded-lg md:rounded-none h-[300px] md:h-[500px]";
     } else if (layout === "left") {
       classes += "float-left w-1/2 md:w-5/12 mr-6 mb-4 clear-left";
       imgStyle += "rounded-2xl shadow-md";
@@ -875,7 +895,7 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
                   <img
                     src={b.content}
                     className={imgStyle}
-                    style={{ objectPosition: b.focus || "center" }}
+                    style={{ objectPosition: b.focus || "50% 50%" }}
                     onError={(e) => (e.target.style.display = "none")}
                   />
                   {b.caption && (
@@ -896,7 +916,7 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
                     ? "rounded-full"
                     : "rounded-2xl shadow-md"
                 }`}
-                style={{ objectPosition: b.focus || "center" }}
+                style={{ objectPosition: b.focus || "50% 50%" }}
                 onError={(e) => (e.target.style.display = "none")}
               />
               <img
@@ -906,7 +926,7 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
                     ? "rounded-full"
                     : "rounded-2xl shadow-md"
                 }`}
-                style={{ objectPosition: b.focus2 || "center" }}
+                style={{ objectPosition: b.focus2 || "50% 50%" }}
                 onError={(e) => (e.target.style.display = "none")}
               />
               {b.caption && (
@@ -922,8 +942,8 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
   );
 };
 
-// --- VIEWS ---
-
+// ... Rest of the file remains same (MemoryDetail, App, etc.)
+// Re-paste the rest of the App component logic here for completeness in your file
 const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
   const [hydratedImages, setHydratedImages] = useState([]);
   const [loadingImages, setLoadingImages] = useState(true);
@@ -970,7 +990,6 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
 
   return (
     <div className={`min-h-screen ${getBg()}`}>
-      {/* --- LIGHTBOX MODAL --- */}
       {isLightboxOpen && (
         <div
           className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm flex items-center justify-center animate-fade-in"
@@ -1161,8 +1180,6 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
     </div>
   );
 };
-
-// --- APP COMPONENT ---
 
 const ThemeSelector = ({ selected, onSelect }) => {
   const themes = [
