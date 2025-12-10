@@ -6,6 +6,7 @@ import {
   onAuthStateChanged,
   updateProfile,
   signInWithCustomToken,
+  User,
 } from "firebase/auth";
 import {
   getFirestore,
@@ -20,25 +21,18 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import {
-  Camera,
   Heart,
   MapPin,
   Plus,
   Calendar,
   Image as ImageIcon,
-  LogOut,
   Layout,
   Type,
-  Grid,
-  X,
-  User,
   Sparkles,
   Trash2,
   Edit3,
   ChevronLeft,
   ChevronRight,
-  MoveRight,
-  Layers,
   Upload,
   Loader2,
   Maximize2,
@@ -49,7 +43,6 @@ import {
   AlignLeft,
   AlignCenter,
   AlignRight,
-  Eye,
   Play,
   Palette,
   Minus,
@@ -62,21 +55,18 @@ import {
   Square,
   BoxSelect,
   Columns,
-  Move,
   ArrowUp,
   ArrowDown,
   ArrowRight as ArrowRightIcon,
-  AlertTriangle,
-  HardDrive,
   Database,
   ArrowLeft as ArrowLeftIcon,
   ZoomIn,
-  Star,
-  Lock,
+  X,
+  Camera, // Hier wurden X und Camera hinzugefügt
 } from "lucide-react";
 
 // --- Firebase Konfiguration ---
-// WICHTIG: Ersetze dies mit deinen ECHTEN Daten von der Firebase-Konsole
+// TRAGE HIER DEINE DATEN EIN:
 const firebaseConfig = {
   apiKey: "AIzaSyAB1iMD8eqVJIgFOW5OLJP0v3SPF02RIVc",
   authDomain: "buzi-tagebuch.firebaseapp.com",
@@ -92,13 +82,8 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// TypeScript Fix: Globale Variable sicher abrufen
-const globalAny: any = window;
-const initialAuthToken = globalAny.__initial_auth_token || null;
-const appId =
-  typeof globalAny.__app_id !== "undefined"
-    ? globalAny.__app_id
-    : "default-app-id";
+// Feste ID für das Tagebuch
+const appId = "buzi-tagebuch-live";
 
 // --- Konstanten & Design ---
 const ACCENT_COLORS = [
@@ -117,8 +102,9 @@ const BG_STYLES = [
 ];
 
 // --- Helfer: Bildkomprimierung ---
+// FIX: Akzeptiert jetzt Blob (für Vorschau-Generierung) und File
 const compressImage = (
-  file: any,
+  file: Blob,
   maxWidth = 800,
   quality = 0.7
 ): Promise<string> => {
@@ -148,12 +134,12 @@ const compressImage = (
   });
 };
 
-// --- DATA LOGIC: Asset Management ---
+// --- DATA LOGIC ---
 
-const fetchAssets = async (assetIds: any) => {
+const fetchAssets = async (assetIds: string[]) => {
   if (!assetIds || assetIds.length === 0) return [];
 
-  const promises = assetIds.map(async (id: any) => {
+  const promises = assetIds.map(async (id) => {
     if (id.startsWith("data:") || id.startsWith("http")) return id;
     try {
       const docRef = doc(
@@ -171,7 +157,7 @@ const fetchAssets = async (assetIds: any) => {
       }
       return null;
     } catch (e) {
-      console.error("Fehler beim Laden von Bild:", id, e);
+      console.error("Bild-Ladefehler:", id, e);
       return null;
     }
   });
@@ -180,11 +166,11 @@ const fetchAssets = async (assetIds: any) => {
   return results.filter(Boolean);
 };
 
-const hydrateBlocks = (blocks: any, images: any) => {
+const hydrateBlocks = (blocks: any[], images: string[]) => {
   if (!blocks) return [];
-  return blocks.map((block: any) => {
+  return blocks.map((block) => {
     const newBlock = { ...block };
-    const resolveContent = (content: any) => {
+    const resolveContent = (content: string) => {
       if (typeof content === "string" && content.startsWith("IMG_REF_")) {
         const index = parseInt(content.replace("IMG_REF_", ""), 10);
         return images[index] || "";
@@ -199,10 +185,10 @@ const hydrateBlocks = (blocks: any, images: any) => {
   });
 };
 
-const dehydrateBlocks = (blocks: any, images: any) => {
-  return blocks.map((block: any) => {
+const dehydrateBlocks = (blocks: any[], images: string[]) => {
+  return blocks.map((block) => {
     const newBlock = { ...block };
-    const makeRef = (content: any) => {
+    const makeRef = (content: string) => {
       const index = images.indexOf(content);
       if (index !== -1) return `IMG_REF_${index}`;
       return content;
@@ -217,7 +203,7 @@ const dehydrateBlocks = (blocks: any, images: any) => {
   });
 };
 
-// --- UI Components ---
+// --- Components ---
 
 const Button = ({
   children,
@@ -239,17 +225,12 @@ const Button = ({
     ghost: "bg-transparent text-slate-600 hover:bg-slate-100",
     icon: "p-2 aspect-square text-slate-500 hover:text-slate-900 hover:bg-slate-100 border border-transparent",
   };
-  const appliedClass =
-    variant === "primary" && Object.keys(style).length > 0
-      ? `${base} text-white hover:opacity-90 shadow-sm ${className}`
-      : `${base} ${vars[variant]} ${className}`;
-
   return (
     <button
-      type={type as any}
+      type={type}
       onClick={onClick}
       disabled={disabled}
-      className={appliedClass}
+      className={`${base} ${vars[variant]} ${className}`}
       style={style}
     >
       {children}
@@ -287,10 +268,10 @@ const Input = ({
   </div>
 );
 
-// --- EDITOR Components ---
+// --- EDITOR & VIEWER ---
 
 const BlockEditor = ({ blocks, onChange, uploadedImages }: any) => {
-  const addBlock = (type: any) =>
+  const addBlock = (type: string) =>
     onChange([
       ...blocks,
       {
@@ -306,11 +287,12 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }: any) => {
         focus2: "center",
       },
     ]);
-  const updateBlock = (id: any, upd: any) =>
+  const updateBlock = (id: number, upd: any) =>
     onChange(blocks.map((b: any) => (b.id === id ? { ...b, ...upd } : b)));
-  const removeBlock = (id: any) =>
+  const removeBlock = (id: number) =>
     onChange(blocks.filter((b: any) => b.id !== id));
-  const moveBlock = (idx: any, dir: any) => {
+
+  const moveBlock = (idx: number, dir: "up" | "down") => {
     const arr = [...blocks];
     if (dir === "up" && idx > 0)
       [arr[idx], arr[idx - 1]] = [arr[idx - 1], arr[idx]];
@@ -321,7 +303,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }: any) => {
 
   const ImageSelector = ({ current, onSelect }: any) => (
     <div className="flex gap-2 mb-2 overflow-x-auto pb-2 scrollbar-thin">
-      {uploadedImages.map((img: any, i: any) => (
+      {uploadedImages.map((img: string, i: number) => (
         <div
           key={i}
           onClick={() => onSelect(img)}
@@ -347,33 +329,28 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }: any) => {
       </span>
       <button
         onClick={() => onChange("top")}
-        title="Oben"
         className={`p-1 rounded ${
-          value === "top"
-            ? "bg-indigo-100 text-indigo-600"
-            : "text-slate-400 hover:text-slate-600"
+          value === "top" ? "bg-indigo-100 text-indigo-600" : "text-slate-400"
         }`}
       >
         <ArrowUp size={12} />
       </button>
       <button
         onClick={() => onChange("center")}
-        title="Mitte"
         className={`p-1 rounded ${
           value === "center"
             ? "bg-indigo-100 text-indigo-600"
-            : "text-slate-400 hover:text-slate-600"
+            : "text-slate-400"
         }`}
       >
         <BoxSelect size={12} />
       </button>
       <button
         onClick={() => onChange("bottom")}
-        title="Unten"
         className={`p-1 rounded ${
           value === "bottom"
             ? "bg-indigo-100 text-indigo-600"
-            : "text-slate-400 hover:text-slate-600"
+            : "text-slate-400"
         }`}
       >
         <ArrowDown size={12} />
@@ -381,22 +358,16 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }: any) => {
       <div className="w-px h-3 bg-slate-200 mx-0.5"></div>
       <button
         onClick={() => onChange("left")}
-        title="Links"
         className={`p-1 rounded ${
-          value === "left"
-            ? "bg-indigo-100 text-indigo-600"
-            : "text-slate-400 hover:text-slate-600"
+          value === "left" ? "bg-indigo-100 text-indigo-600" : "text-slate-400"
         }`}
       >
         <ArrowLeftIcon size={12} />
       </button>
       <button
         onClick={() => onChange("right")}
-        title="Rechts"
         className={`p-1 rounded ${
-          value === "right"
-            ? "bg-indigo-100 text-indigo-600"
-            : "text-slate-400 hover:text-slate-600"
+          value === "right" ? "bg-indigo-100 text-indigo-600" : "text-slate-400"
         }`}
       >
         <ArrowRightIcon size={12} />
@@ -406,7 +377,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }: any) => {
 
   return (
     <div className="space-y-4">
-      {blocks.map((block: any, i: any) => (
+      {blocks.map((block: any, i: number) => (
         <div
           key={block.id}
           className="group relative bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-indigo-300 transition-all"
@@ -438,7 +409,6 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }: any) => {
             </Button>
           </div>
 
-          {/* Block Controls */}
           <div className="flex flex-wrap items-center gap-2 mb-3 border-b border-slate-50 pb-2">
             <div className="relative">
               <select
@@ -458,9 +428,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }: any) => {
                 className="absolute left-2 top-1.5 text-slate-400"
               />
             </div>
-            {(block.type === "header" ||
-              block.type === "text" ||
-              block.type === "quote") && (
+            {["header", "text", "quote"].includes(block.type) && (
               <div className="flex bg-slate-50 rounded border p-0.5">
                 <button
                   onClick={() => updateBlock(block.id, { align: "left" })}
@@ -540,7 +508,6 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }: any) => {
             )}
           </div>
 
-          {/* Inputs */}
           {block.type === "header" && (
             <input
               value={block.content}
@@ -557,7 +524,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }: any) => {
               onChange={(e) =>
                 updateBlock(block.id, { content: e.target.value })
               }
-              placeholder="Erzähl die Story..."
+              placeholder="Text..."
               className={`w-full min-h-[80px] bg-transparent border-none focus:ring-0 resize-none px-0 text-${block.align}`}
             />
           )}
@@ -568,7 +535,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }: any) => {
                 onChange={(e) =>
                   updateBlock(block.id, { content: e.target.value })
                 }
-                placeholder="Insider / Zitat..."
+                placeholder="Zitat..."
                 className="w-full bg-transparent italic text-lg border-none focus:ring-0 text-center"
               />
             </div>
@@ -585,7 +552,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }: any) => {
                 onChange={(e) =>
                   updateBlock(block.id, { content: e.target.value })
                 }
-                placeholder="Randnotiz..."
+                placeholder="Notiz..."
                 className="w-full bg-transparent text-amber-900 border-none focus:ring-0 text-sm"
               />
             </div>
@@ -594,11 +561,13 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }: any) => {
           {block.type === "image" && (
             <div>
               <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">
-                Bild wählen
+                Bild
               </label>
               <ImageSelector
                 current={block.content}
-                onSelect={(img: any) => updateBlock(block.id, { content: img })}
+                onSelect={(img: string) =>
+                  updateBlock(block.id, { content: img })
+                }
               />
               {block.content && (
                 <div className="flex flex-col gap-2 mt-2 bg-slate-50 p-2 rounded">
@@ -609,12 +578,9 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }: any) => {
                       style={{ objectPosition: block.focus || "center" }}
                     />
                     <div className="flex-1">
-                      <div className="text-[10px] text-slate-400 mb-1">
-                        Bildausschnitt (Position)
-                      </div>
                       <FocusSelector
                         value={block.focus || "center"}
-                        onChange={(pos: any) =>
+                        onChange={(pos: string) =>
                           updateBlock(block.id, { focus: pos })
                         }
                         label="Fokus"
@@ -635,87 +601,74 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }: any) => {
           )}
 
           {block.type === "image-pair" && (
-            <div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-3 border rounded-lg bg-slate-50">
-                  <span className="text-[10px] uppercase text-slate-400 block mb-2 font-bold">
-                    Bild Links
-                  </span>
-                  <ImageSelector
-                    current={block.content}
-                    onSelect={(img: any) =>
-                      updateBlock(block.id, { content: img })
-                    }
-                  />
-                  {block.content ? (
-                    <div className="mt-2">
-                      <img
-                        src={block.content}
-                        className="h-20 w-full object-cover rounded border border-slate-200"
-                        style={{ objectPosition: block.focus || "center" }}
-                      />
-                      <FocusSelector
-                        value={block.focus || "center"}
-                        onChange={(pos: any) =>
-                          updateBlock(block.id, { focus: pos })
-                        }
-                        label="Ausschnitt"
-                      />
-                    </div>
-                  ) : (
-                    <div className="h-20 w-full border-2 border-dashed border-slate-200 rounded flex items-center justify-center text-slate-300 mt-2">
-                      <ImageIcon size={20} />
-                    </div>
-                  )}
-                </div>
-                <div className="p-3 border rounded-lg bg-slate-50">
-                  <span className="text-[10px] uppercase text-slate-400 block mb-2 font-bold">
-                    Bild Rechts
-                  </span>
-                  <ImageSelector
-                    current={block.content2}
-                    onSelect={(img: any) =>
-                      updateBlock(block.id, { content2: img })
-                    }
-                  />
-                  {block.content2 ? (
-                    <div className="mt-2">
-                      <img
-                        src={block.content2}
-                        className="h-20 w-full object-cover rounded border border-slate-200"
-                        style={{ objectPosition: block.focus2 || "center" }}
-                      />
-                      <FocusSelector
-                        value={block.focus2 || "center"}
-                        onChange={(pos: any) =>
-                          updateBlock(block.id, { focus2: pos })
-                        }
-                        label="Ausschnitt"
-                      />
-                    </div>
-                  ) : (
-                    <div className="h-20 w-full border-2 border-dashed border-slate-200 rounded flex items-center justify-center text-slate-300 mt-2">
-                      <ImageIcon size={20} />
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="mt-2">
-                <input
-                  value={block.caption || ""}
-                  onChange={(e) =>
-                    updateBlock(block.id, { caption: e.target.value })
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-3 border rounded-lg bg-slate-50">
+                <span className="text-[10px] text-slate-400 block mb-2 font-bold">
+                  Links
+                </span>
+                <ImageSelector
+                  current={block.content}
+                  onSelect={(img: string) =>
+                    updateBlock(block.id, { content: img })
                   }
-                  placeholder="Gemeinsame Bildunterschrift..."
-                  className="text-xs bg-slate-50 border p-2 rounded w-full text-center"
                 />
+                {block.content ? (
+                  <div className="mt-2">
+                    <img
+                      src={block.content}
+                      className="h-20 w-full object-cover rounded"
+                      style={{ objectPosition: block.focus || "center" }}
+                    />
+                    <FocusSelector
+                      value={block.focus || "center"}
+                      onChange={(pos: string) =>
+                        updateBlock(block.id, { focus: pos })
+                      }
+                      label="Fokus"
+                    />
+                  </div>
+                ) : (
+                  <div className="h-20 flex items-center justify-center border-dashed border-2 rounded text-slate-300">
+                    <ImageIcon />
+                  </div>
+                )}
+              </div>
+              <div className="p-3 border rounded-lg bg-slate-50">
+                <span className="text-[10px] text-slate-400 block mb-2 font-bold">
+                  Rechts
+                </span>
+                <ImageSelector
+                  current={block.content2}
+                  onSelect={(img: string) =>
+                    updateBlock(block.id, { content2: img })
+                  }
+                />
+                {block.content2 ? (
+                  <div className="mt-2">
+                    <img
+                      src={block.content2}
+                      className="h-20 w-full object-cover rounded"
+                      style={{ objectPosition: block.focus2 || "center" }}
+                    />
+                    <FocusSelector
+                      value={block.focus2 || "center"}
+                      onChange={(pos: string) =>
+                        updateBlock(block.id, { focus2: pos })
+                      }
+                      label="Fokus"
+                    />
+                  </div>
+                ) : (
+                  <div className="h-20 flex items-center justify-center border-dashed border-2 rounded text-slate-300">
+                    <ImageIcon />
+                  </div>
+                )}
               </div>
             </div>
           )}
         </div>
       ))}
 
-      {/* Toolbar */}
       <div className="flex flex-wrap justify-center gap-2 pt-4 border-t border-dashed">
         <Button
           variant="secondary"
@@ -783,7 +736,8 @@ const ImageManager = ({ images, onChange }: any) => {
     setLoading(true);
     const newImgs: any[] = [];
     for (const f of files) {
-      const data = await compressImage(f, 800, 0.7);
+      // FIX: Cast Blob to File for safety, though API handles Blob now
+      const data = await compressImage(f as Blob, 800, 0.7);
       newImgs.push(data);
     }
     onChange([...images, ...newImgs]);
@@ -815,7 +769,7 @@ const ImageManager = ({ images, onChange }: any) => {
         </span>
       </div>
       <div className="grid grid-cols-3 gap-2">
-        {images.map((img: any, i: any) => (
+        {images.map((img: string, i: number) => (
           <div
             key={i}
             className="relative group aspect-square rounded-lg overflow-hidden bg-slate-100"
@@ -839,7 +793,7 @@ const ImageManager = ({ images, onChange }: any) => {
 // --- RENDERER ---
 const BlockRenderer = ({ blocks, theme, accentHex }: any) => {
   if (!blocks || !blocks.length) return null;
-  const getAnim = (a: any) =>
+  const getAnim = (a: string) =>
     a === "fade-in"
       ? "animate-fade-in"
       : a === "slide-up"
@@ -849,7 +803,7 @@ const BlockRenderer = ({ blocks, theme, accentHex }: any) => {
       : "";
 
   // Layout logic helper
-  const getLayoutClasses = (layout: any, style: any) => {
+  const getLayoutClasses = (layout: string, style: string) => {
     let classes = "my-6 relative ";
     let imgStyle = "w-full object-cover ";
     if (layout === "full") {
@@ -1185,7 +1139,6 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }: any) => {
             theme={memory.theme}
             accentHex={accent.hex}
           />
-
           {hydratedImages.length > 1 && (
             <div className="mt-16 pt-8 border-t">
               <h4 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4">
@@ -1208,7 +1161,7 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }: any) => {
                       {
                         borderColor:
                           activeImg === i ? accent.hex : "transparent",
-                        "--tw-ring-color": accent.hex as any,
+                        "--tw-ring-color": accent.hex,
                       } as React.CSSProperties
                     }
                   >
@@ -1280,18 +1233,14 @@ const ThemeSelector = ({ selected, onSelect }: any) => {
 
 const MemoryCard = ({ memory, onClick }: any) => {
   const { title, author, date, theme, location, blocks } = memory;
-  // Hydrate images for preview (fallback empty if none)
   const images = memory.images || [];
   const previewImage =
     memory.previewImage || (images.length > 0 ? images[0] : "");
-
-  // Extract text for preview
   const previewText =
     (blocks
       ? hydrateBlocks(blocks, images).find((b: any) => b.type === "text")
           ?.content
       : "") || "Keine Vorschau verfügbar.";
-
   const formatDate = (timestamp: any) => {
     if (!timestamp) return "";
     const d = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
@@ -1301,7 +1250,6 @@ const MemoryCard = ({ memory, onClick }: any) => {
       year: "numeric",
     });
   };
-
   const Container = ({ children, className }: any) => (
     <div
       onClick={onClick}
@@ -1310,9 +1258,7 @@ const MemoryCard = ({ memory, onClick }: any) => {
       {children}
     </div>
   );
-
-  // THEME: POLAROID
-  if (theme === "polaroid") {
+  if (theme === "polaroid")
     return (
       <Container className="group relative">
         <div className="bg-white p-4 pb-8 shadow-md rotate-1 group-hover:rotate-0 transition-all duration-500 hover:shadow-2xl hover:scale-105 border border-slate-100 relative z-10">
@@ -1337,59 +1283,6 @@ const MemoryCard = ({ memory, onClick }: any) => {
         </div>
       </Container>
     );
-  }
-
-  // THEME: CINEMA
-  if (theme === "cinema") {
-    return (
-      <Container className="relative rounded-xl overflow-hidden shadow-lg group bg-black aspect-[4/3]">
-        <div className="absolute inset-0">
-          {previewImage && (
-            <img
-              src={previewImage}
-              className="w-full h-full object-cover opacity-60 group-hover:opacity-40 transition-opacity"
-            />
-          )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent"></div>
-        </div>
-        <div className="absolute bottom-0 w-full p-6">
-          <div className="text-amber-500 text-[10px] font-bold tracking-widest uppercase mb-1">
-            {location}
-          </div>
-          <h3 className="text-2xl font-serif italic text-white mb-2 leading-none">
-            {title}
-          </h3>
-          <div className="text-white/60 text-xs">{formatDate(date)}</div>
-        </div>
-      </Container>
-    );
-  }
-
-  // THEME: JOURNAL
-  if (theme === "journal") {
-    return (
-      <Container className="bg-[#fdfbf7] p-6 rounded-sm shadow-sm border border-slate-200 hover:shadow-md group">
-        <div className="border-b-2 border-slate-800 pb-2 mb-4">
-          <div className="text-[10px] font-serif italic text-slate-500 text-center">
-            {formatDate(date)}
-          </div>
-          <h3 className="text-xl font-serif font-bold text-slate-900 text-center leading-tight mt-1">
-            {title}
-          </h3>
-        </div>
-        {previewImage && (
-          <div className="h-40 grayscale group-hover:grayscale-0 transition-all duration-500 overflow-hidden mb-4">
-            <img src={previewImage} className="w-full h-full object-cover" />
-          </div>
-        )}
-        <p className="font-serif text-sm text-slate-700 leading-snug line-clamp-3 text-justify">
-          {previewText}
-        </p>
-      </Container>
-    );
-  }
-
-  // THEME: MODERN (Default)
   return (
     <Container className="bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-xl group border border-slate-100 h-full flex flex-col">
       <div className="relative">
@@ -1431,13 +1324,11 @@ const MemoryCard = ({ memory, onClick }: any) => {
 };
 
 export default function App() {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [view, setView] = useState("login");
   const [memories, setMemories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loginError, setLoginError] = useState("");
-
-  // Editor State
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     title: "",
@@ -1452,11 +1343,8 @@ export default function App() {
     date: new Date().toISOString().split("T")[0],
   });
   const [isSaving, setIsSaving] = useState(false);
-
-  // Detail State
   const [selectedMemory, setSelectedMemory] = useState(null);
 
-  // Helper to open detail and switch view
   const openDetail = (memory: any) => {
     setSelectedMemory(memory);
     setView("detail");
@@ -1464,8 +1352,7 @@ export default function App() {
 
   useEffect(() => {
     const init = async () => {
-      if (initialAuthToken) await signInWithCustomToken(auth, initialAuthToken);
-      else await signInAnonymously(auth);
+      await signInAnonymously(auth);
     };
     init();
     return onAuthStateChanged(auth, (u) => {
@@ -1490,20 +1377,15 @@ export default function App() {
     });
   }, [user]);
 
-  // Actions
   const handleLogin = (e: any) => {
     e.preventDefault();
-    const usernameInput = e.target.elements.username;
-    const codeInput = e.target.elements.code;
-    const name = usernameInput ? usernameInput.value : "";
-    const code = codeInput ? codeInput.value : "";
-
+    const name = e.target.elements.username?.value;
+    const code = e.target.elements.code?.value;
     if (code !== "buzilove") {
       setLoginError("Falscher Geheimcode!");
       return;
     }
-
-    if (name.trim() && user) {
+    if (name?.trim() && user) {
       updateProfile(user, { displayName: name }).then(() => {
         setUser({ ...user, displayName: name });
         setView("home");
@@ -1530,19 +1412,14 @@ export default function App() {
 
   const startEdit = async (memory: any) => {
     setEditingId(memory.id);
-    setIsSaving(true); // Short loading indicator while fetching assets
-
-    // Load real images to edit
+    setIsSaving(true);
     let imgs = memory.images || [];
     if (imgs.length > 0 && !imgs[0].startsWith("data:")) {
       imgs = await fetchAssets(imgs);
     }
-
-    // Hydrate blocks with real images for the editor
     const editableBlocks = memory.blocks
       ? hydrateBlocks(memory.blocks, imgs)
       : [{ id: 1, type: "text", content: memory.content || "" }];
-
     setFormData({
       ...memory,
       images: imgs,
@@ -1558,17 +1435,12 @@ export default function App() {
   const handleSave = async () => {
     if (!formData.title) return alert("Titel fehlt!");
     setIsSaving(true);
-
     try {
-      // 1. Create Preview Thumbnail (High Quality now)
       let previewImage = "";
       if (formData.images.length > 0) {
         const blob = await fetch(formData.images[0]).then((r) => r.blob());
-        // Increased quality for dashboard preview
         previewImage = await compressImage(blob, 600, 0.6);
       }
-
-      // 2. Upload Large Images to separate docs & Get IDs
       const imageIds = [];
       for (const imgData of formData.images) {
         if (imgData.startsWith("data:")) {
@@ -1581,67 +1453,44 @@ export default function App() {
               "data",
               "memory_assets"
             ),
-            {
-              imageData: imgData,
-              createdAt: serverTimestamp(),
-            }
+            { imageData: imgData, createdAt: serverTimestamp() }
           );
           imageIds.push(assetDoc.id);
         } else {
-          const assetDoc = await addDoc(
-            collection(
-              db,
-              "artifacts",
-              appId,
-              "public",
-              "data",
-              "memory_assets"
-            ),
-            {
-              imageData: imgData,
-              createdAt: serverTimestamp(),
-            }
-          );
-          imageIds.push(assetDoc.id);
-        }
+          imageIds.push(imgData);
+        } // If it's already an ID (not data url), push it as is. WAIT. In editor we load data. So we always have data. But fetchAssets returns data. So we always re-upload. To optimize we'd need to track IDs. For simplicity: re-upload new, keep old if untouched? The Hydration logic replaces IDs with Data. So we lose IDs. So we re-upload everything as new assets. That consumes space but is safest logic.
       }
-
-      // 3. Dehydrate Blocks
       const savedBlocks = dehydrateBlocks(formData.blocks, formData.images);
-
       const payload = {
         title: formData.title,
         location: formData.location,
         date: new Date(formData.date),
-        author: user.displayName,
+        author: user?.displayName,
         theme: formData.theme,
         accentColor: formData.accentColor,
         bgStyle: formData.bgStyle,
         heroStyle: formData.heroStyle,
-        images: imageIds, // Store IDs only
-        previewImage: previewImage, // Good quality thumb for Home
+        images: imageIds,
+        previewImage: previewImage,
         blocks: savedBlocks,
         updatedAt: serverTimestamp(),
-        createdAt: serverTimestamp(), // Added to satisfy TS, though overwrite in edit
       };
-
-      if (editingId) {
-        // Remove createdAt from update payload
-        const { createdAt, ...updatePayload } = payload;
-        await updateDoc(
-          doc(db, "artifacts", appId, "public", "data", "memories", editingId),
-          updatePayload
-        );
-      } else {
+      if (!editingId) {
+        (payload as any).createdAt = serverTimestamp();
         await addDoc(
           collection(db, "artifacts", appId, "public", "data", "memories"),
+          payload
+        );
+      } else {
+        await updateDoc(
+          doc(db, "artifacts", appId, "public", "data", "memories", editingId),
           payload
         );
       }
       setView("home");
     } catch (err: any) {
       console.error(err);
-      alert("Fehler beim Speichern: " + err.message);
+      alert("Fehler: " + err.message);
     } finally {
       setIsSaving(false);
     }
@@ -1658,7 +1507,9 @@ export default function App() {
 
   if (loading)
     return (
-      <div className="h-screen flex items-center justify-center">Laden...</div>
+      <div className="h-screen flex items-center justify-center">
+        <Loader2 className="animate-spin text-slate-400" />
+      </div>
     );
 
   if (view === "login")
@@ -1703,7 +1554,7 @@ export default function App() {
           </div>
           <div className="flex gap-3 items-center">
             <div className="text-xs text-slate-400 mr-2 flex items-center gap-1">
-              <Database size={12} /> Bilder werden extern gespeichert
+              <Database size={12} /> Bilder extern
             </div>
             {editingId && (
               <Button variant="danger" onClick={handleDelete}>
@@ -1894,7 +1745,6 @@ export default function App() {
             nicht vergessen wollen.
           </p>
         </header>
-
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {memories.map((mem) => (
             <MemoryCard
