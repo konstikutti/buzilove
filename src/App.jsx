@@ -99,8 +99,8 @@ const BG_STYLES = [
   { id: "mesh", name: "Mesh", desc: "Nebel" },
 ];
 
-// --- Helfer: Bildkomprimierung (High Quality Update) ---
-const compressImage = (file, maxWidth = 1920, quality = 0.85) => {
+// --- Helfer: Intelligente Bildkomprimierung ---
+const compressImage = (file, maxWidth = 1600, quality = 0.8) => {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -112,7 +112,7 @@ const compressImage = (file, maxWidth = 1920, quality = 0.85) => {
         let width = img.width;
         let height = img.height;
 
-        // Nur verkleinern, wenn größer als maxWidth
+        // 1. Skalierung
         if (width > maxWidth) {
           const scaleSize = maxWidth / width;
           width = maxWidth;
@@ -123,7 +123,28 @@ const compressImage = (file, maxWidth = 1920, quality = 0.85) => {
         canvas.height = height;
         const ctx = canvas.getContext("2d");
         ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", quality));
+
+        // 2. Komprimierung mit Größen-Check
+        let currentQuality = quality;
+        let dataUrl = canvas.toDataURL("image/jpeg", currentQuality);
+
+        // Sicherheits-Check: Firestore erlaubt max ca. 1.048.487 Bytes
+        // Wir gehen auf Nummer sicher (ca. 950KB Limit für den String)
+        while (dataUrl.length > 950000 && currentQuality > 0.1) {
+          currentQuality -= 0.1;
+          dataUrl = canvas.toDataURL("image/jpeg", currentQuality);
+        }
+
+        // Notfall-Modus: Wenn selbst schlechte Qualität zu groß ist, Bild drastisch verkleinern
+        if (dataUrl.length > 950000) {
+          const scale = 0.5;
+          canvas.width = width * scale;
+          canvas.height = height * scale;
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          dataUrl = canvas.toDataURL("image/jpeg", 0.5);
+        }
+
+        resolve(dataUrl);
       };
     };
   });
@@ -263,7 +284,7 @@ const Input = ({
   </div>
 );
 
-// --- DRAGGABLE IMAGE COMPONENT (NEU) ---
+// --- DRAGGABLE IMAGE COMPONENT ---
 const DraggableImage = ({
   src,
   position = "center",
@@ -273,7 +294,6 @@ const DraggableImage = ({
   const imgRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  // Parse initial position or default to 50% 50%
   const getPos = () => {
     if (!position || position === "center") return { x: 50, y: 50 };
     const parts = position.split(" ");
@@ -289,26 +309,15 @@ const DraggableImage = ({
 
   const handleMouseMove = (e) => {
     if (!isDragging || !imgRef.current) return;
-
     const rect = imgRef.current.getBoundingClientRect();
-    // Calculate percentages based on mouse movement relative to image container
-    // Inverted logic: moving mouse right moves image "view" right (showing left part) ??
-    // Actually for object-position: moving to 0% shows left edge.
-    // Let's implement direct mapping: Mouse at left edge = 0%, Right = 100%
-
     let x = ((e.clientX - rect.left) / rect.width) * 100;
     let y = ((e.clientY - rect.top) / rect.height) * 100;
-
-    // Clamp values
     x = Math.max(0, Math.min(100, x));
     y = Math.max(0, Math.min(100, y));
-
     onPositionChange(`${x.toFixed(1)}% ${y.toFixed(1)}%`);
   };
 
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
+  const handleMouseUp = () => setIsDragging(false);
 
   useEffect(() => {
     if (isDragging) {
@@ -336,7 +345,6 @@ const DraggableImage = ({
         style={{ objectPosition: position }}
         alt=""
       />
-      {/* Overlay hint */}
       <div
         className={`absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none`}
       >
@@ -740,8 +748,8 @@ const ImageManager = ({ images, onChange }) => {
     setLoading(true);
     const newImgs = [];
     for (const f of files) {
-      // High quality for uploads
-      const data = await compressImage(f, 1920, 0.85);
+      // High quality for uploads (1600px width, but intelligent quality reduction if needed)
+      const data = await compressImage(f, 1600, 0.8);
       newImgs.push(data);
     }
     onChange([...images, ...newImgs]);
@@ -943,8 +951,8 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
   );
 };
 
-// ... Rest of the file remains same (MemoryDetail, App, etc.)
-// Re-paste the rest of the App component logic here for completeness in your file
+// --- VIEWS ---
+
 const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
   const [hydratedImages, setHydratedImages] = useState([]);
   const [loadingImages, setLoadingImages] = useState(true);
