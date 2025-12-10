@@ -75,8 +75,8 @@ import {
   Lock,
 } from "lucide-react";
 
-// --- WICHTIG: Hier deine EIGENEN Firebase-Daten einfügen ---
-// Lösche den Block unten und füge deinen ein, ABER OHNE die Zeile "const analytics = ..."
+// --- Firebase Konfiguration ---
+// WICHTIG: Ersetze dies mit deinen ECHTEN Daten von der Firebase-Konsole
 const firebaseConfig = {
   apiKey: "AIzaSyAB1iMD8eqVJIgFOW5OLJP0v3SPF02RIVc",
   authDomain: "buzi-tagebuch.firebaseapp.com",
@@ -91,9 +91,14 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-// Wir verzichten hier auf "getAnalytics", das verursacht oft Fehler in der Sandbox.
 
-const appId = typeof __app_id !== "undefined" ? __app_id : "default-app-id";
+// TypeScript Fix: Globale Variable sicher abrufen
+const globalAny: any = window;
+const initialAuthToken = globalAny.__initial_auth_token || null;
+const appId =
+  typeof globalAny.__app_id !== "undefined"
+    ? globalAny.__app_id
+    : "default-app-id";
 
 // --- Konstanten & Design ---
 const ACCENT_COLORS = [
@@ -112,11 +117,15 @@ const BG_STYLES = [
 ];
 
 // --- Helfer: Bildkomprimierung ---
-const compressImage = (file, maxWidth = 800, quality = 0.7) => {
+const compressImage = (
+  file: any,
+  maxWidth = 800,
+  quality = 0.7
+): Promise<string> => {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
-    reader.onload = (event) => {
+    reader.onload = (event: any) => {
       const img = new Image();
       img.src = event.target.result;
       img.onload = () => {
@@ -130,8 +139,10 @@ const compressImage = (file, maxWidth = 800, quality = 0.7) => {
           canvas.height = img.height;
         }
         const ctx = canvas.getContext("2d");
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL("image/jpeg", quality));
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL("image/jpeg", quality));
+        }
       };
     };
   });
@@ -139,10 +150,10 @@ const compressImage = (file, maxWidth = 800, quality = 0.7) => {
 
 // --- DATA LOGIC: Asset Management ---
 
-const fetchAssets = async (assetIds) => {
+const fetchAssets = async (assetIds: any) => {
   if (!assetIds || assetIds.length === 0) return [];
 
-  const promises = assetIds.map(async (id) => {
+  const promises = assetIds.map(async (id: any) => {
     if (id.startsWith("data:") || id.startsWith("http")) return id;
     try {
       const docRef = doc(
@@ -169,11 +180,11 @@ const fetchAssets = async (assetIds) => {
   return results.filter(Boolean);
 };
 
-const hydrateBlocks = (blocks, images) => {
+const hydrateBlocks = (blocks: any, images: any) => {
   if (!blocks) return [];
-  return blocks.map((block) => {
+  return blocks.map((block: any) => {
     const newBlock = { ...block };
-    const resolveContent = (content) => {
+    const resolveContent = (content: any) => {
       if (typeof content === "string" && content.startsWith("IMG_REF_")) {
         const index = parseInt(content.replace("IMG_REF_", ""), 10);
         return images[index] || "";
@@ -188,10 +199,10 @@ const hydrateBlocks = (blocks, images) => {
   });
 };
 
-const dehydrateBlocks = (blocks, images) => {
-  return blocks.map((block) => {
+const dehydrateBlocks = (blocks: any, images: any) => {
+  return blocks.map((block: any) => {
     const newBlock = { ...block };
-    const makeRef = (content) => {
+    const makeRef = (content: any) => {
       const index = images.indexOf(content);
       if (index !== -1) return `IMG_REF_${index}`;
       return content;
@@ -216,10 +227,10 @@ const Button = ({
   type = "button",
   disabled = false,
   style = {},
-}) => {
+}: any) => {
   const base =
     "px-4 py-2 rounded-xl font-medium transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2";
-  const vars = {
+  const vars: any = {
     primary:
       "bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm hover:shadow-md",
     secondary:
@@ -232,9 +243,10 @@ const Button = ({
     variant === "primary" && Object.keys(style).length > 0
       ? `${base} text-white hover:opacity-90 shadow-sm ${className}`
       : `${base} ${vars[variant]} ${className}`;
+
   return (
     <button
-      type={type}
+      type={type as any}
       onClick={onClick}
       disabled={disabled}
       className={appliedClass}
@@ -253,7 +265,7 @@ const Input = ({
   placeholder,
   name,
   error,
-}) => (
+}: any) => (
   <div className="mb-4 w-full">
     {label && (
       <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
@@ -277,8 +289,8 @@ const Input = ({
 
 // --- EDITOR Components ---
 
-const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
-  const addBlock = (type) =>
+const BlockEditor = ({ blocks, onChange, uploadedImages }: any) => {
+  const addBlock = (type: any) =>
     onChange([
       ...blocks,
       {
@@ -294,10 +306,11 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
         focus2: "center",
       },
     ]);
-  const updateBlock = (id, upd) =>
-    onChange(blocks.map((b) => (b.id === id ? { ...b, ...upd } : b)));
-  const removeBlock = (id) => onChange(blocks.filter((b) => b.id !== id));
-  const moveBlock = (idx, dir) => {
+  const updateBlock = (id: any, upd: any) =>
+    onChange(blocks.map((b: any) => (b.id === id ? { ...b, ...upd } : b)));
+  const removeBlock = (id: any) =>
+    onChange(blocks.filter((b: any) => b.id !== id));
+  const moveBlock = (idx: any, dir: any) => {
     const arr = [...blocks];
     if (dir === "up" && idx > 0)
       [arr[idx], arr[idx - 1]] = [arr[idx - 1], arr[idx]];
@@ -306,9 +319,9 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
     onChange(arr);
   };
 
-  const ImageSelector = ({ current, onSelect }) => (
+  const ImageSelector = ({ current, onSelect }: any) => (
     <div className="flex gap-2 mb-2 overflow-x-auto pb-2 scrollbar-thin">
-      {uploadedImages.map((img, i) => (
+      {uploadedImages.map((img: any, i: any) => (
         <div
           key={i}
           onClick={() => onSelect(img)}
@@ -327,7 +340,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
     </div>
   );
 
-  const FocusSelector = ({ value, onChange, label }) => (
+  const FocusSelector = ({ value, onChange, label }: any) => (
     <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-md p-1 shadow-sm mt-1">
       <span className="text-[10px] text-slate-400 font-bold uppercase px-1">
         {label || "Fokus"}
@@ -393,7 +406,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
 
   return (
     <div className="space-y-4">
-      {blocks.map((block, i) => (
+      {blocks.map((block: any, i: any) => (
         <div
           key={block.id}
           className="group relative bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-indigo-300 transition-all"
@@ -585,7 +598,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
               </label>
               <ImageSelector
                 current={block.content}
-                onSelect={(img) => updateBlock(block.id, { content: img })}
+                onSelect={(img: any) => updateBlock(block.id, { content: img })}
               />
               {block.content && (
                 <div className="flex flex-col gap-2 mt-2 bg-slate-50 p-2 rounded">
@@ -601,7 +614,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                       </div>
                       <FocusSelector
                         value={block.focus || "center"}
-                        onChange={(pos) =>
+                        onChange={(pos: any) =>
                           updateBlock(block.id, { focus: pos })
                         }
                         label="Fokus"
@@ -630,7 +643,9 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                   </span>
                   <ImageSelector
                     current={block.content}
-                    onSelect={(img) => updateBlock(block.id, { content: img })}
+                    onSelect={(img: any) =>
+                      updateBlock(block.id, { content: img })
+                    }
                   />
                   {block.content ? (
                     <div className="mt-2">
@@ -641,7 +656,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                       />
                       <FocusSelector
                         value={block.focus || "center"}
-                        onChange={(pos) =>
+                        onChange={(pos: any) =>
                           updateBlock(block.id, { focus: pos })
                         }
                         label="Ausschnitt"
@@ -659,7 +674,9 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                   </span>
                   <ImageSelector
                     current={block.content2}
-                    onSelect={(img) => updateBlock(block.id, { content2: img })}
+                    onSelect={(img: any) =>
+                      updateBlock(block.id, { content2: img })
+                    }
                   />
                   {block.content2 ? (
                     <div className="mt-2">
@@ -670,7 +687,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                       />
                       <FocusSelector
                         value={block.focus2 || "center"}
-                        onChange={(pos) =>
+                        onChange={(pos: any) =>
                           updateBlock(block.id, { focus2: pos })
                         }
                         label="Ausschnitt"
@@ -756,22 +773,22 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
   );
 };
 
-const ImageManager = ({ images, onChange }) => {
+const ImageManager = ({ images, onChange }: any) => {
   const [loading, setLoading] = useState(false);
-  const fileInput = useRef(null);
+  const fileInput = useRef<HTMLInputElement>(null);
 
-  const handleFiles = async (e) => {
+  const handleFiles = async (e: any) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
     setLoading(true);
-    const newImgs = [];
+    const newImgs: any[] = [];
     for (const f of files) {
       const data = await compressImage(f, 800, 0.7);
       newImgs.push(data);
     }
     onChange([...images, ...newImgs]);
     setLoading(false);
-    fileInput.current.value = "";
+    if (fileInput.current) fileInput.current.value = "";
   };
 
   return (
@@ -798,14 +815,16 @@ const ImageManager = ({ images, onChange }) => {
         </span>
       </div>
       <div className="grid grid-cols-3 gap-2">
-        {images.map((img, i) => (
+        {images.map((img: any, i: any) => (
           <div
             key={i}
             className="relative group aspect-square rounded-lg overflow-hidden bg-slate-100"
           >
             <img src={img} className="w-full h-full object-cover" />
             <button
-              onClick={() => onChange(images.filter((_, idx) => idx !== i))}
+              onClick={() =>
+                onChange(images.filter((_: any, idx: any) => idx !== i))
+              }
               className="absolute top-1 right-1 bg-white p-1 rounded-full shadow opacity-0 group-hover:opacity-100"
             >
               <X size={12} />
@@ -818,9 +837,9 @@ const ImageManager = ({ images, onChange }) => {
 };
 
 // --- RENDERER ---
-const BlockRenderer = ({ blocks, theme, accentHex }) => {
+const BlockRenderer = ({ blocks, theme, accentHex }: any) => {
   if (!blocks || !blocks.length) return null;
-  const getAnim = (a) =>
+  const getAnim = (a: any) =>
     a === "fade-in"
       ? "animate-fade-in"
       : a === "slide-up"
@@ -830,7 +849,7 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
       : "";
 
   // Layout logic helper
-  const getLayoutClasses = (layout, style) => {
+  const getLayoutClasses = (layout: any, style: any) => {
     let classes = "my-6 relative ";
     let imgStyle = "w-full object-cover ";
     if (layout === "full") {
@@ -855,7 +874,7 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
 
   return (
     <div className="space-y-6 flow-root">
-      {blocks.map((b) => (
+      {blocks.map((b: any) => (
         <div
           key={b.id}
           className={`${getAnim(b.animation)} ${
@@ -922,7 +941,7 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
                     src={b.content}
                     className={imgStyle}
                     style={{ objectPosition: b.focus || "center" }}
-                    onError={(e) => (e.target.style.display = "none")}
+                    onError={(e) => ((e.target as any).style.display = "none")}
                   />
                   {b.caption && (
                     <figcaption className="text-center text-xs text-slate-500 mt-2 italic">
@@ -943,7 +962,7 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
                     : "rounded-2xl shadow-md"
                 }`}
                 style={{ objectPosition: b.focus || "center" }}
-                onError={(e) => (e.target.style.display = "none")}
+                onError={(e) => ((e.target as any).style.display = "none")}
               />
               <img
                 src={b.content2 || "https://via.placeholder.com/400"}
@@ -953,7 +972,7 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
                     : "rounded-2xl shadow-md"
                 }`}
                 style={{ objectPosition: b.focus2 || "center" }}
-                onError={(e) => (e.target.style.display = "none")}
+                onError={(e) => ((e.target as any).style.display = "none")}
               />
               {b.caption && (
                 <div className="col-span-2 text-center text-xs text-slate-500 italic">
@@ -970,8 +989,8 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
 
 // --- VIEWS ---
 
-const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
-  const [hydratedImages, setHydratedImages] = useState([]);
+const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }: any) => {
+  const [hydratedImages, setHydratedImages] = useState<any[]>([]);
   const [loadingImages, setLoadingImages] = useState(true);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
 
@@ -1185,10 +1204,13 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
                         ? "ring-2 ring-offset-2"
                         : "opacity-80 hover:opacity-100"
                     }`}
-                    style={{
-                      borderColor: activeImg === i ? accent.hex : "transparent",
-                      "--tw-ring-color": accent.hex,
-                    }}
+                    style={
+                      {
+                        borderColor:
+                          activeImg === i ? accent.hex : "transparent",
+                        "--tw-ring-color": accent.hex as any,
+                      } as React.CSSProperties
+                    }
                   >
                     <img
                       src={img}
@@ -1210,8 +1232,7 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
 
 // --- APP COMPONENT ---
 
-// ... (ThemeSelector Component remains same)
-const ThemeSelector = ({ selected, onSelect }) => {
+const ThemeSelector = ({ selected, onSelect }: any) => {
   const themes = [
     { id: "modern", name: "Modern", icon: <Layout size={18} />, desc: "Clean" },
     {
@@ -1257,8 +1278,7 @@ const ThemeSelector = ({ selected, onSelect }) => {
   );
 };
 
-// --- THEMED MEMORY CARD ---
-const MemoryCard = ({ memory, onClick }) => {
+const MemoryCard = ({ memory, onClick }: any) => {
   const { title, author, date, theme, location, blocks } = memory;
   // Hydrate images for preview (fallback empty if none)
   const images = memory.images || [];
@@ -1268,10 +1288,11 @@ const MemoryCard = ({ memory, onClick }) => {
   // Extract text for preview
   const previewText =
     (blocks
-      ? hydrateBlocks(blocks, images).find((b) => b.type === "text")?.content
+      ? hydrateBlocks(blocks, images).find((b: any) => b.type === "text")
+          ?.content
       : "") || "Keine Vorschau verfügbar.";
 
-  const formatDate = (timestamp) => {
+  const formatDate = (timestamp: any) => {
     if (!timestamp) return "";
     const d = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
     return d.toLocaleDateString("de-DE", {
@@ -1281,7 +1302,7 @@ const MemoryCard = ({ memory, onClick }) => {
     });
   };
 
-  const Container = ({ children, className }) => (
+  const Container = ({ children, className }: any) => (
     <div
       onClick={onClick}
       className={`cursor-pointer transform transition-all duration-300 hover:-translate-y-1 ${className}`}
@@ -1410,14 +1431,14 @@ const MemoryCard = ({ memory, onClick }) => {
 };
 
 export default function App() {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState<any>(null);
   const [view, setView] = useState("login");
-  const [memories, setMemories] = useState([]);
+  const [memories, setMemories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loginError, setLoginError] = useState("");
 
   // Editor State
-  const [editingId, setEditingId] = useState(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     title: "",
     location: "",
@@ -1426,8 +1447,8 @@ export default function App() {
     accentColor: "indigo",
     bgStyle: "clean",
     heroStyle: "compact",
-    images: [],
-    blocks: [],
+    images: [] as any[],
+    blocks: [] as any[],
     date: new Date().toISOString().split("T")[0],
   });
   const [isSaving, setIsSaving] = useState(false);
@@ -1436,15 +1457,14 @@ export default function App() {
   const [selectedMemory, setSelectedMemory] = useState(null);
 
   // Helper to open detail and switch view
-  const openDetail = (memory) => {
+  const openDetail = (memory: any) => {
     setSelectedMemory(memory);
     setView("detail");
   };
 
   useEffect(() => {
     const init = async () => {
-      if (typeof __initial_auth_token !== "undefined" && __initial_auth_token)
-        await signInWithCustomToken(auth, __initial_auth_token);
+      if (initialAuthToken) await signInWithCustomToken(auth, initialAuthToken);
       else await signInAnonymously(auth);
     };
     init();
@@ -1462,13 +1482,16 @@ export default function App() {
     return onSnapshot(q, (snap) => {
       const data = snap.docs
         .map((d) => ({ id: d.id, ...d.data() }))
-        .sort((a, b) => new Date(b.date) - new Date(a.date));
+        .sort(
+          (a: any, b: any) =>
+            new Date(b.date).getTime() - new Date(a.date).getTime()
+        );
       setMemories(data);
     });
   }, [user]);
 
   // Actions
-  const handleLogin = (e) => {
+  const handleLogin = (e: any) => {
     e.preventDefault();
     const usernameInput = e.target.elements.username;
     const codeInput = e.target.elements.code;
@@ -1505,7 +1528,7 @@ export default function App() {
     setView("editor");
   };
 
-  const startEdit = async (memory) => {
+  const startEdit = async (memory: any) => {
     setEditingId(memory.id);
     setIsSaving(true); // Short loading indicator while fetching assets
 
@@ -1599,22 +1622,24 @@ export default function App() {
         previewImage: previewImage, // Good quality thumb for Home
         blocks: savedBlocks,
         updatedAt: serverTimestamp(),
+        createdAt: serverTimestamp(), // Added to satisfy TS, though overwrite in edit
       };
 
       if (editingId) {
+        // Remove createdAt from update payload
+        const { createdAt, ...updatePayload } = payload;
         await updateDoc(
           doc(db, "artifacts", appId, "public", "data", "memories", editingId),
-          payload
+          updatePayload
         );
       } else {
-        payload.createdAt = serverTimestamp();
         await addDoc(
           collection(db, "artifacts", appId, "public", "data", "memories"),
           payload
         );
       }
       setView("home");
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
       alert("Fehler beim Speichern: " + err.message);
     } finally {
@@ -1623,7 +1648,7 @@ export default function App() {
   };
 
   const handleDelete = async () => {
-    if (window.confirm("Löschen?")) {
+    if (editingId && window.confirm("Löschen?")) {
       await deleteDoc(
         doc(db, "artifacts", appId, "public", "data", "memories", editingId)
       );
@@ -1703,7 +1728,7 @@ export default function App() {
                 <Input
                   label="Titel"
                   value={formData.title}
-                  onChange={(e) =>
+                  onChange={(e: any) =>
                     setFormData({ ...formData, title: e.target.value })
                   }
                 />
@@ -1711,7 +1736,7 @@ export default function App() {
                   label="Datum"
                   type="date"
                   value={formData.date}
-                  onChange={(e) =>
+                  onChange={(e: any) =>
                     setFormData({ ...formData, date: e.target.value })
                   }
                 />
@@ -1719,7 +1744,7 @@ export default function App() {
               <Input
                 label="Ort"
                 value={formData.location}
-                onChange={(e) =>
+                onChange={(e: any) =>
                   setFormData({ ...formData, location: e.target.value })
                 }
               />
@@ -1727,14 +1752,14 @@ export default function App() {
             <section className="bg-white p-8 rounded-2xl shadow-sm ring-4 ring-slate-100">
               <BlockEditor
                 blocks={formData.blocks}
-                onChange={(b) => setFormData({ ...formData, blocks: b })}
+                onChange={(b: any) => setFormData({ ...formData, blocks: b })}
                 uploadedImages={formData.images}
               />
             </section>
             <section className="bg-white p-6 rounded-2xl shadow-sm">
               <ImageManager
                 images={formData.images}
-                onChange={(i) => setFormData({ ...formData, images: i })}
+                onChange={(i: any) => setFormData({ ...formData, images: i })}
               />
             </section>
           </div>
@@ -1824,7 +1849,7 @@ export default function App() {
                 </label>
                 <ThemeSelector
                   selected={formData.theme}
-                  onSelect={(t) => setFormData({ ...formData, theme: t })}
+                  onSelect={(t: any) => setFormData({ ...formData, theme: t })}
                 />
               </div>
             </section>
