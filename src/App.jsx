@@ -66,12 +66,13 @@ import {
 // --- Firebase Konfiguration ---
 // WICHTIG: Ersetze dies mit deinen ECHTEN Daten von der Firebase-Konsole
 const firebaseConfig = {
-  apiKey: "DEIN_API_KEY",
-  authDomain: "dein-projekt.firebaseapp.com",
-  projectId: "dein-projekt",
-  storageBucket: "dein-projekt.firebasestorage.app",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abcdef",
+  apiKey: "AIzaSyAB1iMD8eqVJIgFOW5OLJP0v3SPF02RIVc",
+  authDomain: "buzi-tagebuch.firebaseapp.com",
+  projectId: "buzi-tagebuch",
+  storageBucket: "buzi-tagebuch.firebasestorage.app",
+  messagingSenderId: "1090406194300",
+  appId: "1:1090406194300:web:f48ff12c0ec1248a2d3df9",
+  measurementId: "G-5R85SV3KXC",
 };
 
 // --- Firebase Initialisierung ---
@@ -1181,6 +1182,8 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
   );
 };
 
+// --- APP COMPONENT ---
+
 const ThemeSelector = ({ selected, onSelect }) => {
   const themes = [
     { id: "modern", name: "Modern", icon: <Layout size={18} />, desc: "Clean" },
@@ -1435,7 +1438,7 @@ export default function App() {
   }, [user]);
 
   // Actions
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     const usernameInput = e.target.elements.username;
     const codeInput = e.target.elements.code;
@@ -1447,11 +1450,29 @@ export default function App() {
       return;
     }
 
-    if (name.trim() && user) {
-      updateProfile(user, { displayName: name }).then(() => {
-        setUser({ ...user, displayName: name });
-        setView("home");
-      });
+    if (!name.trim()) {
+      setLoginError("Bitte Namen eingeben");
+      return;
+    }
+
+    // Robustheit: Falls User noch null ist (z.B. Init fehlgeschlagen oder noch nicht fertig), versuchen wir es jetzt
+    let currentUser = user;
+    if (!currentUser) {
+      try {
+        const result = await signInAnonymously(auth);
+        currentUser = result.user;
+        setUser(currentUser);
+      } catch (error) {
+        console.error("Login Fehler:", error);
+        setLoginError("Verbindungsfehler: Prüfe deine Config!");
+        return;
+      }
+    }
+
+    if (currentUser) {
+      await updateProfile(currentUser, { displayName: name });
+      setUser({ ...currentUser, displayName: name });
+      setView("home");
     }
   };
 
@@ -1509,7 +1530,7 @@ export default function App() {
       if (formData.images.length > 0) {
         const blob = await fetch(formData.images[0]).then((r) => r.blob());
         // Increased quality for dashboard preview
-        previewImage = await compressImage(blob, 600, 0.6);
+        previewImage = await compressImage(blob, 800, 0.7);
       }
 
       // 2. Upload Large Images to separate docs & Get IDs
