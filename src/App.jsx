@@ -129,13 +129,12 @@ const compressImage = (file, maxWidth = 1600, quality = 0.8) => {
         let dataUrl = canvas.toDataURL("image/jpeg", currentQuality);
 
         // Sicherheits-Check: Firestore erlaubt max ca. 1.048.487 Bytes
-        // Wir gehen auf Nummer sicher (ca. 950KB Limit für den String)
         while (dataUrl.length > 950000 && currentQuality > 0.1) {
           currentQuality -= 0.1;
           dataUrl = canvas.toDataURL("image/jpeg", currentQuality);
         }
 
-        // Notfall-Modus: Wenn selbst schlechte Qualität zu groß ist, Bild drastisch verkleinern
+        // Notfall-Modus
         if (dataUrl.length > 950000) {
           const scale = 0.5;
           canvas.width = width * scale;
@@ -990,6 +989,17 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
     return "bg-white";
   };
 
+  const formatDate = (date) => {
+    if (!date) return "";
+    // Sicherstellen, dass wir mit einem Datumsobjekt arbeiten, auch wenn es ein Timestamp ist
+    const d = date.toDate ? date.toDate() : new Date(date);
+    return d.toLocaleDateString("de-DE", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  };
+
   if (loadingImages)
     return (
       <div className="h-screen flex items-center justify-center">
@@ -1125,7 +1135,7 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
                 className="flex gap-2 text-xs font-bold uppercase tracking-wider mb-2"
                 style={{ color: accent.hex }}
               >
-                {memory.location} • {new Date(memory.date).toLocaleDateString()}
+                {memory.location} • {formatDate(memory.date)}
               </div>
               <h1 className="text-5xl font-bold text-slate-900 mb-6">
                 {memory.title}
@@ -1168,7 +1178,8 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
                         : "opacity-80 hover:opacity-100"
                     }`}
                     style={{
-                      borderColor: activeImg === i ? accent.hex : "transparent",
+                      borderColor:
+                        activeImg === i ? accent.hex : "transparent",
                       "--tw-ring-color": accent.hex,
                     }}
                   >
@@ -1245,11 +1256,18 @@ const MemoryCard = ({ memory, onClick }) => {
   const previewImage =
     memory.previewImage || (images.length > 0 ? images[0] : "");
 
-  // Extract text for preview
-  const previewText =
-    (blocks
-      ? hydrateBlocks(blocks, images).find((b) => b.type === "text")?.content
-      : "") || "Keine Vorschau verfügbar.";
+  // Extract text for preview - Changed from searching for 'text' to filtering based on types and trimming content
+  const getPreviewContent = () => {
+    if (!blocks) return "";
+    const hydrated = hydrateBlocks(blocks, images);
+    const textBlock = hydrated.find(
+      (b) =>
+        (b.type === "text" || b.type === "note" || b.type === "quote") &&
+        b.content?.trim()
+    );
+    return textBlock ? textBlock.content : "";
+  };
+  const previewText = getPreviewContent();
 
   const formatDate = (timestamp) => {
     if (!timestamp) return "";
@@ -1341,9 +1359,12 @@ const MemoryCard = ({ memory, onClick }) => {
             <img src={previewImage} className="w-full h-full object-cover" />
           </div>
         )}
-        <p className="font-serif text-sm text-slate-700 leading-snug line-clamp-3 text-justify">
-          {previewText}
-        </p>
+        {/* Conditional rendering for preview text */}
+        {previewText && (
+          <p className="font-serif text-sm text-slate-700 leading-snug line-clamp-3 text-justify">
+            {previewText}
+          </p>
+        )}
       </Container>
     );
   }
@@ -1375,9 +1396,12 @@ const MemoryCard = ({ memory, onClick }) => {
         <h3 className="text-xl font-bold text-slate-900 mb-3 leading-tight">
           {title}
         </h3>
-        <p className="text-slate-600 text-sm leading-relaxed mb-4 line-clamp-3">
-          {previewText}
-        </p>
+        {/* Conditional rendering for preview text */}
+        {previewText && (
+          <p className="text-slate-600 text-sm leading-relaxed mb-4 line-clamp-3">
+            {previewText}
+          </p>
+        )}
         <div className="mt-auto pt-4 border-t border-slate-100 flex items-center gap-2">
           <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600">
             {author.charAt(0)}
@@ -1446,7 +1470,7 @@ export default function App() {
   }, [user]);
 
   // Actions
-  const handleLogin = async (e) => {
+  const handleLogin = (e) => {
     e.preventDefault();
     const usernameInput = e.target.elements.username;
     const codeInput = e.target.elements.code;
@@ -1458,29 +1482,11 @@ export default function App() {
       return;
     }
 
-    if (!name.trim()) {
-      setLoginError("Bitte Namen eingeben");
-      return;
-    }
-
-    // Robustheit: Falls User noch null ist (z.B. Init fehlgeschlagen oder noch nicht fertig), versuchen wir es jetzt
-    let currentUser = user;
-    if (!currentUser) {
-      try {
-        const result = await signInAnonymously(auth);
-        currentUser = result.user;
-        setUser(currentUser);
-      } catch (error) {
-        console.error("Login Fehler:", error);
-        setLoginError("Verbindungsfehler: Prüfe deine Config!");
-        return;
-      }
-    }
-
-    if (currentUser) {
-      await updateProfile(currentUser, { displayName: name });
-      setUser({ ...currentUser, displayName: name });
-      setView("home");
+    if (name.trim() && user) {
+      updateProfile(user, { displayName: name }).then(() => {
+        setUser({ ...user, displayName: name });
+        setView("home");
+      });
     }
   };
 
