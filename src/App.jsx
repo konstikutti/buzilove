@@ -5,7 +5,6 @@ import {
   signInAnonymously,
   onAuthStateChanged,
   updateProfile,
-  signInWithCustomToken,
 } from "firebase/auth";
 import {
   getFirestore,
@@ -23,13 +22,11 @@ import {
   Heart,
   MapPin,
   Plus,
-  Calendar,
   Image as ImageIcon,
   Layout,
   Type,
   Sparkles,
   Trash2,
-  Edit3,
   ChevronLeft,
   ChevronRight,
   Upload,
@@ -46,12 +43,9 @@ import {
   Palette,
   Minus,
   Quote,
-  LayoutTemplate,
   PanelLeft,
   PanelRight,
   Maximize,
-  Circle,
-  Square,
   BoxSelect,
   Columns,
   ArrowRight as ArrowRightIcon,
@@ -61,6 +55,7 @@ import {
   X,
   Camera,
   Move,
+  Star,
 } from "lucide-react";
 
 // --- Firebase Konfiguration ---
@@ -80,7 +75,6 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Feste ID für das Tagebuch
 const appId = "buzi-tagebuch-live";
 
 // --- Konstanten & Design ---
@@ -94,10 +88,45 @@ const ACCENT_COLORS = [
 ];
 
 const BG_STYLES = [
-  { id: "clean", name: "Clean", desc: "Weiß" },
-  { id: "soft", name: "Soft", desc: "Verlauf" },
-  { id: "mesh", name: "Mesh", desc: "Nebel" },
+  {
+    id: "clean",
+    name: "Clean",
+    desc: "Weiß",
+    css: "bg-white border-slate-200",
+  },
+  {
+    id: "soft",
+    name: "Soft",
+    desc: "Verlauf",
+    css: "bg-gradient-to-br from-white via-indigo-50/50 to-white border-indigo-100",
+  },
+  {
+    id: "mesh",
+    name: "Mesh",
+    desc: "Nebel",
+    css: "bg-white bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-100/40 via-purple-100/20 to-transparent border-purple-100",
+  },
 ];
+
+// --- Helfer: Sicheres Datum (Verhindert "Invalid Date") ---
+const formatDateSafe = (dateInput) => {
+  if (!dateInput) return "";
+  try {
+    // Wenn es ein Firestore Timestamp ist (hat .toDate())
+    const d = dateInput.toDate ? dateInput.toDate() : new Date(dateInput);
+
+    // Prüfen ob das Datum gültig ist
+    if (isNaN(d.getTime())) return "";
+
+    return d.toLocaleDateString("de-DE", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  } catch (e) {
+    return "";
+  }
+};
 
 // --- Helfer: Intelligente Bildkomprimierung ---
 const compressImage = (file, maxWidth = 1600, quality = 0.8) => {
@@ -124,17 +153,14 @@ const compressImage = (file, maxWidth = 1600, quality = 0.8) => {
         const ctx = canvas.getContext("2d");
         ctx.drawImage(img, 0, 0, width, height);
 
-        // 2. Komprimierung mit Größen-Check
         let currentQuality = quality;
         let dataUrl = canvas.toDataURL("image/jpeg", currentQuality);
 
-        // Sicherheits-Check: Firestore erlaubt max ca. 1.048.487 Bytes
         while (dataUrl.length > 950000 && currentQuality > 0.1) {
           currentQuality -= 0.1;
           dataUrl = canvas.toDataURL("image/jpeg", currentQuality);
         }
 
-        // Notfall-Modus
         if (dataUrl.length > 950000) {
           const scale = 0.5;
           canvas.width = width * scale;
@@ -167,12 +193,10 @@ const fetchAssets = async (assetIds) => {
         id
       );
       const snapshot = await getDoc(docRef);
-      if (snapshot.exists()) {
-        return snapshot.data().imageData;
-      }
+      if (snapshot.exists()) return snapshot.data().imageData;
       return null;
     } catch (e) {
-      console.error("Bild-Ladefehler:", id, e);
+      console.error("Bildfehler:", id);
       return null;
     }
   });
@@ -283,7 +307,6 @@ const Input = ({
   </div>
 );
 
-// --- DRAGGABLE IMAGE COMPONENT ---
 const DraggableImage = ({
   src,
   position = "center",
@@ -293,19 +316,10 @@ const DraggableImage = ({
   const imgRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  const getPos = () => {
-    if (!position || position === "center") return { x: 50, y: 50 };
-    const parts = position.split(" ");
-    if (parts.length === 2)
-      return { x: parseFloat(parts[0]), y: parseFloat(parts[1]) };
-    return { x: 50, y: 50 };
-  };
-
   const handleMouseDown = (e) => {
     e.preventDefault();
     setIsDragging(true);
   };
-
   const handleMouseMove = (e) => {
     if (!isDragging || !imgRef.current) return;
     const rect = imgRef.current.getBoundingClientRect();
@@ -313,9 +327,8 @@ const DraggableImage = ({
     let y = ((e.clientY - rect.top) / rect.height) * 100;
     x = Math.max(0, Math.min(100, x));
     y = Math.max(0, Math.min(100, y));
-    onPositionChange(`${x.toFixed(1)}% ${y.toFixed(1)}%`);
+    onPositionChange(`${x.toFixed(0)}% ${y.toFixed(0)}%`);
   };
-
   const handleMouseUp = () => setIsDragging(false);
 
   useEffect(() => {
@@ -340,15 +353,13 @@ const DraggableImage = ({
     >
       <img
         src={src}
-        className="w-full h-full object-cover pointer-events-none"
+        className="w-full h-full object-cover pointer-events-none select-none"
         style={{ objectPosition: position }}
         alt=""
       />
-      <div
-        className={`absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none`}
-      >
-        <div className="bg-black/50 text-white text-[10px] px-2 py-1 rounded flex items-center gap-1">
-          <Move size={12} /> Ziehen zum Ausrichten
+      <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+        <div className="bg-black/50 text-white text-[10px] px-2 py-1 rounded flex items-center gap-1 shadow-lg font-bold">
+          <Move size={12} /> Ziehen
         </div>
       </div>
     </div>
@@ -393,7 +404,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
         <div
           key={i}
           onClick={() => onSelect(img)}
-          className={`w-10 h-10 flex-shrink-0 rounded-md overflow-hidden cursor-pointer border-2 transition-all ${
+          className={`w-12 h-12 flex-shrink-0 rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${
             current === img
               ? "border-indigo-500 ring-2 ring-indigo-200"
               : "border-transparent"
@@ -403,7 +414,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
         </div>
       ))}
       {uploadedImages.length === 0 && (
-        <span className="text-xs text-slate-400">Keine Fotos verfügbar.</span>
+        <span className="text-xs text-slate-400">Erst Bilder hochladen.</span>
       )}
     </div>
   );
@@ -737,7 +748,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
   );
 };
 
-const ImageManager = ({ images, onChange }) => {
+const ImageManager = ({ images, onChange, coverImage, onSetCover }) => {
   const [loading, setLoading] = useState(false);
   const fileInput = useRef(null);
 
@@ -747,7 +758,6 @@ const ImageManager = ({ images, onChange }) => {
     setLoading(true);
     const newImgs = [];
     for (const f of files) {
-      // High quality for uploads (1600px width, but intelligent quality reduction if needed)
       const data = await compressImage(f, 1600, 0.8);
       newImgs.push(data);
     }
@@ -783,15 +793,41 @@ const ImageManager = ({ images, onChange }) => {
         {images.map((img, i) => (
           <div
             key={i}
-            className="relative group aspect-square rounded-lg overflow-hidden bg-slate-100"
+            className={`relative group aspect-square rounded-lg overflow-hidden border-2 transition-all ${
+              img === coverImage
+                ? "border-amber-400 ring-2 ring-amber-100"
+                : "border-transparent bg-slate-100"
+            }`}
           >
             <img src={img} className="w-full h-full object-cover" />
-            <button
-              onClick={() => onChange(images.filter((_, idx) => idx !== i))}
-              className="absolute top-1 right-1 bg-white p-1 rounded-full shadow opacity-0 group-hover:opacity-100"
-            >
-              <X size={12} />
-            </button>
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onChange(images.filter((_, idx) => idx !== i));
+                  if (coverImage === img) onSetCover(null);
+                }}
+                className="absolute top-1 right-1 bg-white p-1 rounded-full shadow opacity-0 group-hover:opacity-100 hover:text-red-500"
+                title="Löschen"
+              >
+                <X size={12} />
+              </button>
+
+              <button
+                onClick={() => onSetCover(img)}
+                className={`absolute bottom-1 right-1 p-1.5 rounded-full shadow transition-all ${
+                  img === coverImage
+                    ? "bg-amber-400 text-white opacity-100"
+                    : "bg-white text-slate-400 opacity-0 group-hover:opacity-100 hover:text-amber-400"
+                }`}
+                title="Als Titelbild"
+              >
+                <Star
+                  size={12}
+                  fill={img === coverImage ? "currentColor" : "none"}
+                />
+              </button>
+            </div>
           </div>
         ))}
       </div>
@@ -811,14 +847,12 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
       ? "animate-zoom-in"
       : "";
 
-  // Layout logic helper
   const getLayoutClasses = (layout, style) => {
     let classes = "my-6 relative ";
     let imgStyle = "w-full object-cover ";
     if (layout === "full") {
-      // FIX MOBILE: Only break out on md screens or larger
-      classes += "w-full md:-mx-12 md:width-[calc(100%+3rem)] block clear-both";
-      imgStyle += "rounded-lg md:rounded-none h-[300px] md:h-[500px]";
+      classes += "w-full block clear-both md:-mx-12 md:w-[calc(100%+6rem)]";
+      imgStyle += "rounded-lg md:rounded-none h-[300px] md:h-[600px]";
     } else if (layout === "left") {
       classes += "float-left w-1/2 md:w-5/12 mr-6 mb-4 clear-left";
       imgStyle += "rounded-2xl shadow-md";
@@ -951,7 +985,6 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
 };
 
 // --- VIEWS ---
-
 const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
   const [hydratedImages, setHydratedImages] = useState([]);
   const [loadingImages, setLoadingImages] = useState(true);
@@ -990,14 +1023,7 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
   };
 
   const formatDate = (date) => {
-    if (!date) return "";
-    // Sicherstellen, dass wir mit einem Datumsobjekt arbeiten, auch wenn es ein Timestamp ist
-    const d = date.toDate ? date.toDate() : new Date(date);
-    return d.toLocaleDateString("de-DE", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
+    return formatDateSafe(date);
   };
 
   if (loadingImages)
@@ -1178,8 +1204,7 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
                         : "opacity-80 hover:opacity-100"
                     }`}
                     style={{
-                      borderColor:
-                        activeImg === i ? accent.hex : "transparent",
+                      borderColor: activeImg === i ? accent.hex : "transparent",
                       "--tw-ring-color": accent.hex,
                     }}
                   >
@@ -1256,27 +1281,22 @@ const MemoryCard = ({ memory, onClick }) => {
   const previewImage =
     memory.previewImage || (images.length > 0 ? images[0] : "");
 
-  // Extract text for preview - Changed from searching for 'text' to filtering based on types and trimming content
+  // Extract text for preview
   const getPreviewContent = () => {
     if (!blocks) return "";
     const hydrated = hydrateBlocks(blocks, images);
     const textBlock = hydrated.find(
       (b) =>
         (b.type === "text" || b.type === "note" || b.type === "quote") &&
-        b.content?.trim()
+        b.content &&
+        b.content.trim().length > 0
     );
     return textBlock ? textBlock.content : "";
   };
   const previewText = getPreviewContent();
 
   const formatDate = (timestamp) => {
-    if (!timestamp) return "";
-    const d = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return d.toLocaleDateString("de-DE", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
+    return formatDateSafe(timestamp);
   };
 
   const Container = ({ children, className }) => (
@@ -1433,6 +1453,7 @@ export default function App() {
     images: [],
     blocks: [],
     date: new Date().toISOString().split("T")[0],
+    coverImage: "", // NEU: Speichert das ausgewählte Titelbild
   });
   const [isSaving, setIsSaving] = useState(false);
 
@@ -1503,6 +1524,7 @@ export default function App() {
       images: [],
       blocks: [{ id: 1, type: "text", content: "" }],
       date: new Date().toISOString().split("T")[0],
+      coverImage: "",
     });
     setView("editor");
   };
@@ -1529,6 +1551,7 @@ export default function App() {
       date: memory.date?.toDate
         ? memory.date.toDate().toISOString().split("T")[0]
         : memory.date,
+      coverImage: memory.coverImage || "", // Ensure cover image is loaded
     });
     setIsSaving(false);
     setView("editor");
@@ -1540,9 +1563,14 @@ export default function App() {
 
     try {
       // 1. Create Preview Thumbnail (High Quality now)
+      // Use selected COVER image, otherwise first image
+      const sourceImage =
+        formData.coverImage ||
+        (formData.images.length > 0 ? formData.images[0] : null);
+
       let previewImage = "";
-      if (formData.images.length > 0) {
-        const blob = await fetch(formData.images[0]).then((r) => r.blob());
+      if (sourceImage) {
+        const blob = await fetch(sourceImage).then((r) => r.blob());
         // Increased quality for dashboard preview
         previewImage = await compressImage(blob, 800, 0.7);
       }
@@ -1598,7 +1626,7 @@ export default function App() {
         bgStyle: formData.bgStyle,
         heroStyle: formData.heroStyle,
         images: imageIds, // Store IDs only
-        previewImage: previewImage, // Good quality thumb for Home
+        previewImage: previewImage, // Good quality thumb from selected cover
         blocks: savedBlocks,
         updatedAt: serverTimestamp(),
       };
@@ -1737,6 +1765,10 @@ export default function App() {
               <ImageManager
                 images={formData.images}
                 onChange={(i) => setFormData({ ...formData, images: i })}
+                coverImage={formData.coverImage}
+                onSetCover={(img) =>
+                  setFormData({ ...formData, coverImage: img })
+                }
               />
             </section>
           </div>
@@ -1745,89 +1777,112 @@ export default function App() {
               <h3 className="text-xs font-bold text-slate-400 uppercase mb-4 flex items-center gap-2">
                 <Palette size={14} /> Design
               </h3>
-              <div className="mb-4">
-                <label className="block text-xs font-bold text-slate-500 mb-2">
-                  Akzentfarbe
-                </label>
-                <div className="flex gap-2 flex-wrap">
-                  {ACCENT_COLORS.map((c) => (
-                    <button
-                      key={c.id}
-                      onClick={() =>
-                        setFormData({ ...formData, accentColor: c.id })
-                      }
-                      className={`w-6 h-6 rounded-full transition-transform hover:scale-110 ${
-                        formData.accentColor === c.id
-                          ? "ring-2 ring-offset-2 ring-slate-400"
-                          : ""
-                      }`}
-                      style={{ backgroundColor: c.hex }}
-                      title={c.name}
-                    />
-                  ))}
+
+              {/* VORSCHAU-BEREICH FÜR DESIGN */}
+              <div className="space-y-6">
+                {/* 1. Akzentfarbe */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-2">
+                    Akzentfarbe
+                  </label>
+                  <div className="flex gap-2 flex-wrap">
+                    {ACCENT_COLORS.map((c) => (
+                      <button
+                        key={c.id}
+                        onClick={() =>
+                          setFormData({ ...formData, accentColor: c.id })
+                        }
+                        className={`w-8 h-8 rounded-full transition-all ${
+                          formData.accentColor === c.id
+                            ? "ring-2 ring-offset-2 ring-slate-400 scale-110"
+                            : "hover:scale-105"
+                        }`}
+                        style={{ backgroundColor: c.hex }}
+                        title={c.name}
+                      />
+                    ))}
+                  </div>
                 </div>
-              </div>
-              <div className="mb-4">
-                <label className="block text-xs font-bold text-slate-500 mb-2">
-                  Hintergrund
-                </label>
-                <div className="flex gap-2">
-                  {BG_STYLES.map((s) => (
+
+                {/* 2. Hintergrund */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-2">
+                    Hintergrund
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {BG_STYLES.map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() =>
+                          setFormData({ ...formData, bgStyle: s.id })
+                        }
+                        className={`h-12 rounded-lg border flex items-center justify-center text-[10px] font-bold uppercase transition-all ${
+                          formData.bgStyle === s.id
+                            ? "ring-2 ring-indigo-500 border-transparent"
+                            : "hover:border-slate-300"
+                        }`}
+                      >
+                        {/* Mini-Vorschau des Hintergrunds */}
+                        <div
+                          className={`w-full h-full rounded-md ${
+                            s.id === "soft"
+                              ? "bg-gradient-to-br from-white via-slate-100 to-white"
+                              : s.id === "mesh"
+                              ? "bg-indigo-50"
+                              : "bg-white"
+                          }`}
+                        ></div>
+                        <span className="absolute">{s.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 3. Titelbild Größe */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-2">
+                    Titelbild
+                  </label>
+                  <div className="flex gap-2">
                     <button
-                      key={s.id}
                       onClick={() =>
-                        setFormData({ ...formData, bgStyle: s.id })
+                        setFormData({ ...formData, heroStyle: "compact" })
                       }
-                      className={`px-2 py-1 text-xs border rounded ${
-                        formData.bgStyle === s.id
-                          ? "bg-slate-900 text-white"
-                          : ""
+                      className={`flex-1 p-2 border rounded-lg flex flex-col items-center gap-2 ${
+                        formData.heroStyle === "compact"
+                          ? "bg-indigo-50 border-indigo-500 text-indigo-700"
+                          : "hover:bg-slate-50"
                       }`}
                     >
-                      {s.name}
+                      <div className="w-full h-8 bg-slate-200 rounded-md"></div>
+                      <span className="text-[10px] font-bold">Kompakt</span>
                     </button>
-                  ))}
+                    <button
+                      onClick={() =>
+                        setFormData({ ...formData, heroStyle: "full" })
+                      }
+                      className={`flex-1 p-2 border rounded-lg flex flex-col items-center gap-2 ${
+                        formData.heroStyle === "full"
+                          ? "bg-indigo-50 border-indigo-500 text-indigo-700"
+                          : "hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="w-full h-8 bg-slate-800 rounded-md"></div>
+                      <span className="text-[10px] font-bold">Vollbild</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-2">
-                  Titelbild
-                </label>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() =>
-                      setFormData({ ...formData, heroStyle: "compact" })
-                    }
-                    className={`flex-1 py-1 text-xs border rounded ${
-                      formData.heroStyle === "compact"
-                        ? "bg-slate-900 text-white"
-                        : ""
-                    }`}
-                  >
-                    Klein
-                  </button>
-                  <button
-                    onClick={() =>
-                      setFormData({ ...formData, heroStyle: "full" })
-                    }
-                    className={`flex-1 py-1 text-xs border rounded ${
-                      formData.heroStyle === "full"
-                        ? "bg-slate-900 text-white"
-                        : ""
-                    }`}
-                  >
-                    Groß
-                  </button>
+
+                {/* 4. Karten-Stil */}
+                <div className="border-t pt-4">
+                  <label className="block text-xs font-bold text-slate-500 mb-2">
+                    Karten-Stil (Vorschau)
+                  </label>
+                  <ThemeSelector
+                    selected={formData.theme}
+                    onSelect={(t) => setFormData({ ...formData, theme: t })}
+                  />
                 </div>
-              </div>
-              <div className="mt-6 border-t pt-4">
-                <label className="block text-xs font-bold text-slate-500 mb-2">
-                  Karten-Stil (Vorschau)
-                </label>
-                <ThemeSelector
-                  selected={formData.theme}
-                  onSelect={(t) => setFormData({ ...formData, theme: t })}
-                />
               </div>
             </section>
           </div>
