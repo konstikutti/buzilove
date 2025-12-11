@@ -130,7 +130,7 @@ const formatDateSafe = (dateInput) => {
 };
 
 // --- Helfer: Intelligente Bildkomprimierung ---
-const compressImage = (file, maxWidth = 1200, quality = 0.8) => {
+const compressImage = (file, maxWidth = 1600, quality = 0.8) => {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
