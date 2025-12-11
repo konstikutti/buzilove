@@ -5,7 +5,6 @@ import {
   signInAnonymously,
   onAuthStateChanged,
   updateProfile,
-  signInWithCustomToken,
 } from "firebase/auth";
 import {
   getFirestore,
@@ -23,13 +22,11 @@ import {
   Heart,
   MapPin,
   Plus,
-  Calendar,
   Image as ImageIcon,
   Layout,
   Type,
   Sparkles,
   Trash2,
-  Edit3,
   ChevronLeft,
   ChevronRight,
   Upload,
@@ -46,12 +43,9 @@ import {
   Palette,
   Minus,
   Quote,
-  LayoutTemplate,
   PanelLeft,
   PanelRight,
   Maximize,
-  Circle,
-  Square,
   BoxSelect,
   Columns,
   ArrowRight as ArrowRightIcon,
@@ -62,6 +56,8 @@ import {
   Camera,
   Move,
   Star,
+  CheckCircle, // Neu für Bestätigung
+  XCircle, // Neu für Abbruch
 } from "lucide-react";
 
 // --- Firebase Konfiguration ---
@@ -81,7 +77,6 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Feste ID für das Tagebuch
 const appId = "buzi-tagebuch-live";
 
 // --- Konstanten & Design ---
@@ -95,7 +90,12 @@ const ACCENT_COLORS = [
 ];
 
 const BG_STYLES = [
-  { id: "clean", name: "Clean", desc: "Weiß", css: "bg-white border-slate-200" },
+  {
+    id: "clean",
+    name: "Clean",
+    desc: "Weiß",
+    css: "bg-white border-slate-200",
+  },
   {
     id: "soft",
     name: "Soft",
@@ -110,20 +110,20 @@ const BG_STYLES = [
   },
 ];
 
-// --- Helfer: Sicheres Datum (Verhindert "Invalid Date") ---
+// --- Helfer: Sicheres Datum ---
 const formatDateSafe = (dateInput) => {
-    if (!dateInput) return '';
-    try {
-        const d = dateInput.toDate ? dateInput.toDate() : new Date(dateInput);
-        if (isNaN(d.getTime())) return ''; 
-        return d.toLocaleDateString('de-DE', { 
-            day: 'numeric', 
-            month: 'long', 
-            year: 'numeric' 
-        });
-    } catch (e) {
-        return '';
-    }
+  if (!dateInput) return "";
+  try {
+    const d = dateInput.toDate ? dateInput.toDate() : new Date(dateInput);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleDateString("de-DE", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  } catch (e) {
+    return "";
+  }
 };
 
 // --- Helfer: Intelligente Bildkomprimierung ---
@@ -139,7 +139,6 @@ const compressImage = (file, maxWidth = 1600, quality = 0.8) => {
         let width = img.width;
         let height = img.height;
 
-        // 1. Skalierung
         if (width > maxWidth) {
           const scaleSize = maxWidth / width;
           width = maxWidth;
@@ -151,17 +150,14 @@ const compressImage = (file, maxWidth = 1600, quality = 0.8) => {
         const ctx = canvas.getContext("2d");
         ctx.drawImage(img, 0, 0, width, height);
 
-        // 2. Komprimierung mit Größen-Check
         let currentQuality = quality;
         let dataUrl = canvas.toDataURL("image/jpeg", currentQuality);
 
-        // Sicherheits-Check: Firestore erlaubt max ca. 1.048.487 Bytes
         while (dataUrl.length > 950000 && currentQuality > 0.1) {
           currentQuality -= 0.1;
           dataUrl = canvas.toDataURL("image/jpeg", currentQuality);
         }
 
-        // Notfall-Modus
         if (dataUrl.length > 950000) {
           const scale = 0.5;
           canvas.width = width * scale;
@@ -180,7 +176,6 @@ const compressImage = (file, maxWidth = 1600, quality = 0.8) => {
 
 const fetchAssets = async (assetIds) => {
   if (!assetIds || assetIds.length === 0) return [];
-
   const promises = assetIds.map(async (id) => {
     if (id.startsWith("data:") || id.startsWith("http")) return id;
     try {
@@ -194,12 +189,10 @@ const fetchAssets = async (assetIds) => {
         id
       );
       const snapshot = await getDoc(docRef);
-      if (snapshot.exists()) {
-        return snapshot.data().imageData;
-      }
+      if (snapshot.exists()) return snapshot.data().imageData;
       return null;
     } catch (e) {
-      console.error("Bild-Ladefehler:", id, e);
+      console.error("Bildfehler:", id);
       return null;
     }
   });
@@ -310,7 +303,6 @@ const Input = ({
   </div>
 );
 
-// --- DRAGGABLE IMAGE COMPONENT ---
 const DraggableImage = ({
   src,
   position = "center",
@@ -320,19 +312,10 @@ const DraggableImage = ({
   const imgRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  const getPos = () => {
-    if (!position || position === "center") return { x: 50, y: 50 };
-    const parts = position.split(" ");
-    if (parts.length === 2)
-      return { x: parseFloat(parts[0]), y: parseFloat(parts[1]) };
-    return { x: 50, y: 50 };
-  };
-
   const handleMouseDown = (e) => {
     e.preventDefault();
     setIsDragging(true);
   };
-
   const handleMouseMove = (e) => {
     if (!isDragging || !imgRef.current) return;
     const rect = imgRef.current.getBoundingClientRect();
@@ -340,9 +323,8 @@ const DraggableImage = ({
     let y = ((e.clientY - rect.top) / rect.height) * 100;
     x = Math.max(0, Math.min(100, x));
     y = Math.max(0, Math.min(100, y));
-    onPositionChange(`${x.toFixed(1)}% ${y.toFixed(1)}%`);
+    onPositionChange(`${x.toFixed(0)}% ${y.toFixed(0)}%`);
   };
-
   const handleMouseUp = () => setIsDragging(false);
 
   useEffect(() => {
@@ -367,7 +349,7 @@ const DraggableImage = ({
     >
       <img
         src={src}
-        className="w-full h-full object-cover pointer-events-none"
+        className="w-full h-full object-cover pointer-events-none select-none"
         style={{ objectPosition: position }}
         alt=""
       />
@@ -764,6 +746,93 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
   );
 };
 
+const ImageManager = ({ images, onChange, coverImage, onSetCover }) => {
+  const [loading, setLoading] = useState(false);
+  const fileInput = useRef(null);
+
+  const handleFiles = async (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+    setLoading(true);
+    const newImgs = [];
+    for (const f of files) {
+      const data = await compressImage(f, 1600, 0.8);
+      newImgs.push(data);
+    }
+    onChange([...images, ...newImgs]);
+    setLoading(false);
+    fileInput.current.value = "";
+  };
+
+  return (
+    <div className="space-y-4">
+      <div
+        onClick={() => fileInput.current?.click()}
+        className="border-2 border-dashed border-slate-300 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500 hover:bg-indigo-50 transition-colors"
+      >
+        <input
+          type="file"
+          multiple
+          accept="image/*"
+          className="hidden"
+          ref={fileInput}
+          onChange={handleFiles}
+        />
+        {loading ? (
+          <Loader2 className="animate-spin text-indigo-500 mb-2" />
+        ) : (
+          <Upload className="text-slate-400 mb-2" />
+        )}
+        <span className="text-sm font-medium text-slate-600">
+          {loading ? "Verarbeite..." : "Fotos hochladen (High Quality)"}
+        </span>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        {images.map((img, i) => (
+          <div
+            key={i}
+            className={`relative group aspect-square rounded-lg overflow-hidden border-2 transition-all ${
+              img === coverImage
+                ? "border-amber-400 ring-2 ring-amber-100"
+                : "border-transparent bg-slate-100"
+            }`}
+          >
+            <img src={img} className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onChange(images.filter((_, idx) => idx !== i));
+                  if (coverImage === img) onSetCover(null);
+                }}
+                className="absolute top-1 right-1 bg-white p-1 rounded-full shadow opacity-0 group-hover:opacity-100 hover:text-red-500"
+                title="Löschen"
+              >
+                <X size={12} />
+              </button>
+
+              <button
+                onClick={() => onSetCover(img)}
+                className={`absolute bottom-1 right-1 p-1.5 rounded-full shadow transition-all ${
+                  img === coverImage
+                    ? "bg-amber-400 text-white opacity-100"
+                    : "bg-white text-slate-400 opacity-0 group-hover:opacity-100 hover:text-amber-400"
+                }`}
+                title="Als Titelbild"
+              >
+                <Star
+                  size={12}
+                  fill={img === coverImage ? "currentColor" : "none"}
+                />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 // --- RENDERER ---
 const BlockRenderer = ({ blocks, theme, accentHex }) => {
   if (!blocks || !blocks.length) return null;
@@ -915,7 +984,6 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
 
 // --- VIEWS ---
 
-// --- THEME SELECTOR ---
 const ThemeSelector = ({ selected, onSelect }) => {
   const themes = [
     { id: "modern", name: "Modern", icon: <Layout size={18} />, desc: "Clean" },
@@ -962,7 +1030,6 @@ const ThemeSelector = ({ selected, onSelect }) => {
   );
 };
 
-// --- MEMORY CARD ---
 const MemoryCard = ({ memory, onClick }) => {
   const { title, author, date, theme, location, blocks } = memory;
   const images = memory.images || [];
@@ -973,7 +1040,7 @@ const MemoryCard = ({ memory, onClick }) => {
   const getPreviewText = () => {
     if (!blocks) return "";
     const hydrated = hydrateBlocks(blocks, images);
-    // Suche nach dem ersten Block, der Text enthält (Text, Zitat oder Notiz)
+    // Search for any block that has text content
     const textBlock = hydrated.find(
       (b) =>
         (b.type === "text" || b.type === "quote" || b.type === "note") &&
@@ -1341,8 +1408,7 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
                         : "opacity-80 hover:opacity-100"
                     }`}
                     style={{
-                      borderColor:
-                        activeImg === i ? accent.hex : "transparent",
+                      borderColor: activeImg === i ? accent.hex : "transparent",
                       "--tw-ring-color": accent.hex,
                     }}
                   >
@@ -1364,8 +1430,6 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
   );
 };
 
-// --- APP COMPONENT ---
-
 export default function App() {
   const [user, setUser] = useState(null);
   const [view, setView] = useState("login");
@@ -1385,9 +1449,14 @@ export default function App() {
     images: [],
     blocks: [],
     date: new Date().toISOString().split("T")[0],
-    coverImage: "", 
+    coverImage: "",
   });
   const [isSaving, setIsSaving] = useState(false);
+
+  // Lösch-Status
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
   const [selectedMemory, setSelectedMemory] = useState(null);
 
   const openDetail = (memory) => {
@@ -1485,7 +1554,9 @@ export default function App() {
     if (!formData.title) return alert("Titel fehlt!");
     setIsSaving(true);
     try {
-      const sourceImage = formData.coverImage || (formData.images.length > 0 ? formData.images[0] : null);
+      const sourceImage =
+        formData.coverImage ||
+        (formData.images.length > 0 ? formData.images[0] : null);
       let previewImage = "";
       if (sourceImage) {
         const blob = await fetch(sourceImage).then((r) => r.blob());
@@ -1557,12 +1628,23 @@ export default function App() {
     }
   };
 
-  const handleDelete = async () => {
-    if (window.confirm("Löschen?")) {
+  const triggerDelete = () => {
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    setIsDeleting(true);
+    try {
       await deleteDoc(
         doc(db, "artifacts", appId, "public", "data", "memories", editingId)
       );
+      setShowDeleteConfirm(false);
       setView("home");
+    } catch (error) {
+      console.error("Fehler beim Löschen:", error);
+      alert("Fehler beim Löschen: " + error.message);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -1615,11 +1697,38 @@ export default function App() {
             <div className="text-xs text-slate-400 mr-2 flex items-center gap-1">
               <Database size={12} /> Bilder werden extern gespeichert
             </div>
-            {editingId && (
-              <Button variant="danger" onClick={handleDelete}>
-                <Trash2 size={16} />
-              </Button>
-            )}
+
+            {/* DELETE BUTTON WITH CONFIRMATION STATE */}
+            {editingId &&
+              (showDeleteConfirm ? (
+                <div className="flex items-center gap-2 bg-red-50 p-1 rounded-lg border border-red-100 animate-in fade-in slide-in-from-right-4">
+                  <span className="text-xs text-red-600 font-bold ml-2">
+                    Wirklich löschen?
+                  </span>
+                  <button
+                    onClick={confirmDelete}
+                    disabled={isDeleting}
+                    className="bg-red-500 text-white p-1.5 rounded hover:bg-red-600 transition-colors"
+                  >
+                    {isDeleting ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <CheckCircle size={14} />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setShowDeleteConfirm(false)}
+                    className="bg-white text-slate-500 p-1.5 rounded border hover:bg-slate-50 transition-colors"
+                  >
+                    <XCircle size={14} />
+                  </button>
+                </div>
+              ) : (
+                <Button variant="danger" onClick={triggerDelete}>
+                  <Trash2 size={16} />
+                </Button>
+              ))}
+
             <Button variant="primary" onClick={handleSave} disabled={isSaving}>
               {isSaving ? (
                 <>
@@ -1671,7 +1780,9 @@ export default function App() {
                 images={formData.images}
                 onChange={(i) => setFormData({ ...formData, images: i })}
                 coverImage={formData.coverImage}
-                onSetCover={(img) => setFormData({ ...formData, coverImage: img })}
+                onSetCover={(img) =>
+                  setFormData({ ...formData, coverImage: img })
+                }
               />
             </section>
           </div>
@@ -1681,10 +1792,101 @@ export default function App() {
                 <Palette size={14} /> Design
               </h3>
               <div className="space-y-6">
-                <div><label className="block text-xs font-bold text-slate-500 mb-2">Akzentfarbe</label><div className="flex gap-2 flex-wrap">{ACCENT_COLORS.map((c) => <button key={c.id} onClick={() => setFormData({ ...formData, accentColor: c.id })} className={`w-8 h-8 rounded-full transition-all ${formData.accentColor === c.id ? "ring-2 ring-offset-2 ring-slate-400 scale-110" : "hover:scale-105"}`} style={{ backgroundColor: c.hex }} title={c.name} />)}</div></div>
-                <div><label className="block text-xs font-bold text-slate-500 mb-2">Hintergrund</label><div className="grid grid-cols-3 gap-2">{BG_STYLES.map((s) => <button key={s.id} onClick={() => setFormData({ ...formData, bgStyle: s.id })} className={`h-12 rounded-lg border flex items-center justify-center text-[10px] font-bold uppercase transition-all ${formData.bgStyle === s.id ? "ring-2 ring-indigo-500 border-transparent" : "hover:border-slate-300"}`}><div className={`w-full h-full rounded-md ${s.id === "soft" ? "bg-gradient-to-br from-white via-slate-100 to-white" : s.id === "mesh" ? "bg-indigo-50" : "bg-white"}`}></div><span className="absolute">{s.name}</span></button>)}</div></div>
-                <div><label className="block text-xs font-bold text-slate-500 mb-2">Titelbild</label><div className="flex gap-2"><button onClick={() => setFormData({ ...formData, heroStyle: "compact" })} className={`flex-1 p-2 border rounded-lg flex flex-col items-center gap-2 ${formData.heroStyle === "compact" ? "bg-indigo-50 border-indigo-500 text-indigo-700" : "hover:bg-slate-50"}`}><div className="w-full h-8 bg-slate-200 rounded-md"></div><span className="text-[10px] font-bold">Kompakt</span></button><button onClick={() => setFormData({ ...formData, heroStyle: "full" })} className={`flex-1 p-2 border rounded-lg flex flex-col items-center gap-2 ${formData.heroStyle === "full" ? "bg-indigo-50 border-indigo-500 text-indigo-700" : "hover:bg-slate-50"}`}><div className="w-full h-8 bg-slate-800 rounded-md"></div><span className="text-[10px] font-bold">Vollbild</span></button></div></div>
-                <div className="border-t pt-4"><label className="block text-xs font-bold text-slate-500 mb-2">Karten-Stil (Vorschau)</label><ThemeSelector selected={formData.theme} onSelect={(t) => setFormData({ ...formData, theme: t })} /></div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-2">
+                    Akzentfarbe
+                  </label>
+                  <div className="flex gap-2 flex-wrap">
+                    {ACCENT_COLORS.map((c) => (
+                      <button
+                        key={c.id}
+                        onClick={() =>
+                          setFormData({ ...formData, accentColor: c.id })
+                        }
+                        className={`w-8 h-8 rounded-full transition-all ${
+                          formData.accentColor === c.id
+                            ? "ring-2 ring-offset-2 ring-slate-400 scale-110"
+                            : "hover:scale-105"
+                        }`}
+                        style={{ backgroundColor: c.hex }}
+                        title={c.name}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-2">
+                    Hintergrund
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {BG_STYLES.map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() =>
+                          setFormData({ ...formData, bgStyle: s.id })
+                        }
+                        className={`h-12 rounded-lg border flex items-center justify-center text-[10px] font-bold uppercase transition-all ${
+                          formData.bgStyle === s.id
+                            ? "ring-2 ring-indigo-500 border-transparent"
+                            : "hover:border-slate-300"
+                        }`}
+                      >
+                        <div
+                          className={`w-full h-full rounded-md ${
+                            s.id === "soft"
+                              ? "bg-gradient-to-br from-white via-slate-100 to-white"
+                              : s.id === "mesh"
+                              ? "bg-indigo-50"
+                              : "bg-white"
+                          }`}
+                        ></div>
+                        <span className="absolute">{s.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-2">
+                    Titelbild
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() =>
+                        setFormData({ ...formData, heroStyle: "compact" })
+                      }
+                      className={`flex-1 p-2 border rounded-lg flex flex-col items-center gap-2 ${
+                        formData.heroStyle === "compact"
+                          ? "bg-indigo-50 border-indigo-500 text-indigo-700"
+                          : "hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="w-full h-8 bg-slate-200 rounded-md"></div>
+                      <span className="text-[10px] font-bold">Kompakt</span>
+                    </button>
+                    <button
+                      onClick={() =>
+                        setFormData({ ...formData, heroStyle: "full" })
+                      }
+                      className={`flex-1 p-2 border rounded-lg flex flex-col items-center gap-2 ${
+                        formData.heroStyle === "full"
+                          ? "bg-indigo-50 border-indigo-500 text-indigo-700"
+                          : "hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="w-full h-8 bg-slate-800 rounded-md"></div>
+                      <span className="text-[10px] font-bold">Vollbild</span>
+                    </button>
+                  </div>
+                </div>
+                <div className="border-t pt-4">
+                  <label className="block text-xs font-bold text-slate-500 mb-2">
+                    Karten-Stil (Vorschau)
+                  </label>
+                  <ThemeSelector
+                    selected={formData.theme}
+                    onSelect={(t) => setFormData({ ...formData, theme: t })}
+                  />
+                </div>
               </div>
             </section>
           </div>
@@ -1750,4 +1952,4 @@ export default function App() {
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500;600&family=Caveat:wght@400;700&display=swap'); .font-serif { font-family: 'Playfair Display', serif; } .font-handwriting { font-family: 'Caveat', cursive; } body { font-family: 'Inter', sans-serif; } .animate-fade-in { animation: fadeIn 0.3s forwards; } @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } } .animate-slide-up { animation: slideUp 1s forwards; } @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }`}</style>
     </div>
   );
-}  
+}
