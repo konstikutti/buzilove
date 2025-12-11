@@ -64,11 +64,7 @@ import {
 } from "lucide-react";
 
 // --- Firebase Konfiguration ---
-// WICHTIG FÜR VERCEL:
-// Wenn du das Projekt auf Vercel hochlädst, musst du die Zeile mit `JSON.parse(__firebase_config)`
-// löschen und stattdessen deine echte Config (siehe unten auskommentiert) verwenden.
-// Für die Vorschau hier MUSS __firebase_config genutzt werden.
-
+// WICHTIG: Ersetze dies mit deinen ECHTEN Daten von der Firebase-Konsole
 const firebaseConfig = {
   apiKey: "AIzaSyAB1iMD8eqVJIgFOW5OLJP0v3SPF02RIVc",
   authDomain: "buzi-tagebuch.firebaseapp.com",
@@ -84,8 +80,8 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Feste ID für das Tagebuch (nutzt Umgebungsvariable für Vorschau, Fallback für Live)
-const appId = typeof __app_id !== "undefined" ? __app_id : "buzi-tagebuch-live";
+// Feste ID für das Tagebuch
+const appId = "buzi-tagebuch-live";
 
 // --- Konstanten & Design ---
 const ACCENT_COLORS = [
@@ -103,8 +99,8 @@ const BG_STYLES = [
   { id: "mesh", name: "Mesh", desc: "Nebel" },
 ];
 
-// --- Helfer: Intelligente Bildkomprimierung (High Quality) ---
-const compressImage = (file, maxWidth = 1920, quality = 0.85) => {
+// --- Helfer: Intelligente Bildkomprimierung ---
+const compressImage = (file, maxWidth = 1600, quality = 0.8) => {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -132,20 +128,20 @@ const compressImage = (file, maxWidth = 1920, quality = 0.85) => {
         let currentQuality = quality;
         let dataUrl = canvas.toDataURL("image/jpeg", currentQuality);
 
-        // Sicherheits-Check: Firestore erlaubt max ca. 1MB
-        // Wir reduzieren Qualität schrittweise, falls das Bild zu riesig ist
+        // Sicherheits-Check: Firestore erlaubt max ca. 1.048.487 Bytes
+        // Wir gehen auf Nummer sicher (ca. 950KB Limit für den String)
         while (dataUrl.length > 950000 && currentQuality > 0.1) {
           currentQuality -= 0.1;
           dataUrl = canvas.toDataURL("image/jpeg", currentQuality);
         }
 
-        // Notfall-Modus
+        // Notfall-Modus: Wenn selbst schlechte Qualität zu groß ist, Bild drastisch verkleinern
         if (dataUrl.length > 950000) {
           const scale = 0.5;
           canvas.width = width * scale;
           canvas.height = height * scale;
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          dataUrl = canvas.toDataURL("image/jpeg", 0.6);
+          dataUrl = canvas.toDataURL("image/jpeg", 0.5);
         }
 
         resolve(dataUrl);
@@ -177,7 +173,7 @@ const fetchAssets = async (assetIds) => {
       }
       return null;
     } catch (e) {
-      console.error("Bild-Ladefehler:", id);
+      console.error("Bild-Ladefehler:", id, e);
       return null;
     }
   });
@@ -298,6 +294,14 @@ const DraggableImage = ({
   const imgRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
 
+  const getPos = () => {
+    if (!position || position === "center") return { x: 50, y: 50 };
+    const parts = position.split(" ");
+    if (parts.length === 2)
+      return { x: parseFloat(parts[0]), y: parseFloat(parts[1]) };
+    return { x: 50, y: 50 };
+  };
+
   const handleMouseDown = (e) => {
     e.preventDefault();
     setIsDragging(true);
@@ -310,7 +314,7 @@ const DraggableImage = ({
     let y = ((e.clientY - rect.top) / rect.height) * 100;
     x = Math.max(0, Math.min(100, x));
     y = Math.max(0, Math.min(100, y));
-    onPositionChange(`${x.toFixed(0)}% ${y.toFixed(0)}%`);
+    onPositionChange(`${x.toFixed(1)}% ${y.toFixed(1)}%`);
   };
 
   const handleMouseUp = () => setIsDragging(false);
@@ -337,22 +341,22 @@ const DraggableImage = ({
     >
       <img
         src={src}
-        className="w-full h-full object-cover pointer-events-none select-none"
+        className="w-full h-full object-cover pointer-events-none"
         style={{ objectPosition: position }}
         alt=""
       />
       <div
         className={`absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none`}
       >
-        <div className="bg-black/60 backdrop-blur text-white text-[10px] px-3 py-1.5 rounded-full flex items-center gap-1 shadow-lg font-bold">
-          <Move size={12} /> Ziehen
+        <div className="bg-black/50 text-white text-[10px] px-2 py-1 rounded flex items-center gap-1">
+          <Move size={12} /> Ziehen zum Ausrichten
         </div>
       </div>
     </div>
   );
 };
 
-// --- EDITOR ---
+// --- EDITOR & VIEWER ---
 
 const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
   const addBlock = (type) =>
@@ -390,7 +394,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
         <div
           key={i}
           onClick={() => onSelect(img)}
-          className={`w-12 h-12 flex-shrink-0 rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${
+          className={`w-10 h-10 flex-shrink-0 rounded-md overflow-hidden cursor-pointer border-2 transition-all ${
             current === img
               ? "border-indigo-500 ring-2 ring-indigo-200"
               : "border-transparent"
@@ -400,7 +404,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
         </div>
       ))}
       {uploadedImages.length === 0 && (
-        <span className="text-xs text-slate-400">Erst Bilder hochladen.</span>
+        <span className="text-xs text-slate-400">Keine Fotos verfügbar.</span>
       )}
     </div>
   );
@@ -744,8 +748,8 @@ const ImageManager = ({ images, onChange }) => {
     setLoading(true);
     const newImgs = [];
     for (const f of files) {
-      // ULTRA High quality for uploads
-      const data = await compressImage(f, 1920, 0.9);
+      // High quality for uploads (1600px width, but intelligent quality reduction if needed)
+      const data = await compressImage(f, 1600, 0.8);
       newImgs.push(data);
     }
     onChange([...images, ...newImgs]);
@@ -812,11 +816,10 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
   const getLayoutClasses = (layout, style) => {
     let classes = "my-6 relative ";
     let imgStyle = "w-full object-cover ";
-
     if (layout === "full") {
-      // FIX: Bündig auf Mobile, breit auf Desktop
-      classes += "w-full block clear-both md:-mx-12 md:w-[calc(100%+6rem)]";
-      imgStyle += "rounded-lg md:rounded-none h-[300px] md:h-[600px]";
+      // FIX MOBILE: Only break out on md screens or larger
+      classes += "w-full md:-mx-12 md:width-[calc(100%+3rem)] block clear-both";
+      imgStyle += "rounded-lg md:rounded-none h-[300px] md:h-[500px]";
     } else if (layout === "left") {
       classes += "float-left w-1/2 md:w-5/12 mr-6 mb-4 clear-left";
       imgStyle += "rounded-2xl shadow-md";
@@ -1122,7 +1125,7 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
                 className="flex gap-2 text-xs font-bold uppercase tracking-wider mb-2"
                 style={{ color: accent.hex }}
               >
-                {memory.location} • {formatDateSafe(memory.date)}
+                {memory.location} • {new Date(memory.date).toLocaleDateString()}
               </div>
               <h1 className="text-5xl font-bold text-slate-900 mb-6">
                 {memory.title}
@@ -1248,6 +1251,16 @@ const MemoryCard = ({ memory, onClick }) => {
       ? hydrateBlocks(blocks, images).find((b) => b.type === "text")?.content
       : "") || "Keine Vorschau verfügbar.";
 
+  const formatDate = (timestamp) => {
+    if (!timestamp) return "";
+    const d = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return d.toLocaleDateString("de-DE", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  };
+
   const Container = ({ children, className }) => (
     <div
       onClick={onClick}
@@ -1277,7 +1290,7 @@ const MemoryCard = ({ memory, onClick }) => {
             </h3>
             <div className="flex justify-between items-center text-slate-400 font-handwriting text-sm mt-4">
               <span>{location}</span>
-              <span>{formatDateSafe(date)}</span>
+              <span>{formatDate(date)}</span>
             </div>
           </div>
         </div>
@@ -1305,7 +1318,7 @@ const MemoryCard = ({ memory, onClick }) => {
           <h3 className="text-2xl font-serif italic text-white mb-2 leading-none">
             {title}
           </h3>
-          <div className="text-white/60 text-xs">{formatDateSafe(date)}</div>
+          <div className="text-white/60 text-xs">{formatDate(date)}</div>
         </div>
       </Container>
     );
@@ -1317,7 +1330,7 @@ const MemoryCard = ({ memory, onClick }) => {
       <Container className="bg-[#fdfbf7] p-6 rounded-sm shadow-sm border border-slate-200 hover:shadow-md group">
         <div className="border-b-2 border-slate-800 pb-2 mb-4">
           <div className="text-[10px] font-serif italic text-slate-500 text-center">
-            {formatDateSafe(date)}
+            {formatDate(date)}
           </div>
           <h3 className="text-xl font-serif font-bold text-slate-900 text-center leading-tight mt-1">
             {title}
@@ -1352,7 +1365,7 @@ const MemoryCard = ({ memory, onClick }) => {
           </div>
         )}
         <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold shadow-sm">
-          {formatDateSafe(date)}
+          {formatDate(date)}
         </div>
       </div>
       <div className="p-6 flex-1 flex flex-col">
@@ -1383,6 +1396,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [loginError, setLoginError] = useState("");
 
+  // Editor State
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({
     title: "",
@@ -1397,8 +1411,11 @@ export default function App() {
     date: new Date().toISOString().split("T")[0],
   });
   const [isSaving, setIsSaving] = useState(false);
+
+  // Detail State
   const [selectedMemory, setSelectedMemory] = useState(null);
 
+  // Helper to open detail and switch view
   const openDetail = (memory) => {
     setSelectedMemory(memory);
     setView("detail");
@@ -1406,7 +1423,6 @@ export default function App() {
 
   useEffect(() => {
     const init = async () => {
-      // Starte IMMER anonym, falls vorhanden (damit Login-Check funktioniert)
       await signInAnonymously(auth);
     };
     init();
@@ -1447,6 +1463,7 @@ export default function App() {
       return;
     }
 
+    // Robustheit: Falls User noch null ist (z.B. Init fehlgeschlagen oder noch nicht fertig), versuchen wir es jetzt
     let currentUser = user;
     if (!currentUser) {
       try {
@@ -1486,13 +1503,15 @@ export default function App() {
 
   const startEdit = async (memory) => {
     setEditingId(memory.id);
-    setIsSaving(true);
+    setIsSaving(true); // Short loading indicator while fetching assets
 
+    // Load real images to edit
     let imgs = memory.images || [];
     if (imgs.length > 0 && !imgs[0].startsWith("data:")) {
       imgs = await fetchAssets(imgs);
     }
 
+    // Hydrate blocks with real images for the editor
     const editableBlocks = memory.blocks
       ? hydrateBlocks(memory.blocks, imgs)
       : [{ id: 1, type: "text", content: memory.content || "" }];
@@ -1514,14 +1533,15 @@ export default function App() {
     setIsSaving(true);
 
     try {
-      // Preview Thumbnail (High Quality)
+      // 1. Create Preview Thumbnail (High Quality now)
       let previewImage = "";
       if (formData.images.length > 0) {
         const blob = await fetch(formData.images[0]).then((r) => r.blob());
+        // Increased quality for dashboard preview
         previewImage = await compressImage(blob, 800, 0.7);
       }
 
-      // Upload Large Images
+      // 2. Upload Large Images to separate docs & Get IDs
       const imageIds = [];
       for (const imgData of formData.images) {
         if (imgData.startsWith("data:")) {
@@ -1541,7 +1561,6 @@ export default function App() {
           );
           imageIds.push(assetDoc.id);
         } else {
-          // Fallback: Wieder hochladen, falls es schon eine ID ist (vermeidet Fehler)
           const assetDoc = await addDoc(
             collection(
               db,
@@ -1560,6 +1579,7 @@ export default function App() {
         }
       }
 
+      // 3. Dehydrate Blocks
       const savedBlocks = dehydrateBlocks(formData.blocks, formData.images);
 
       const payload = {
@@ -1571,8 +1591,8 @@ export default function App() {
         accentColor: formData.accentColor,
         bgStyle: formData.bgStyle,
         heroStyle: formData.heroStyle,
-        images: imageIds,
-        previewImage: previewImage,
+        images: imageIds, // Store IDs only
+        previewImage: previewImage, // Good quality thumb for Home
         blocks: savedBlocks,
         updatedAt: serverTimestamp(),
       };
