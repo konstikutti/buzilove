@@ -69,8 +69,6 @@ import {
 // löschen und stattdessen deine echte Config (siehe unten auskommentiert) verwenden.
 // Für die Vorschau hier MUSS __firebase_config genutzt werden.
 
-const firebaseConfig = JSON.parse(__firebase_config);
-
 const firebaseConfig = {
   apiKey: "AIzaSyAB1iMD8eqVJIgFOW5OLJP0v3SPF02RIVc",
   authDomain: "buzi-tagebuch.firebaseapp.com",
@@ -78,10 +76,8 @@ const firebaseConfig = {
   storageBucket: "buzi-tagebuch.firebasestorage.app",
   messagingSenderId: "1090406194300",
   appId: "1:1090406194300:web:f48ff12c0ec1248a2d3df9",
-  measurementId: "G-5R85SV3KXC"
-};"
+  measurementId: "G-5R85SV3KXC",
 };
-*/
 
 // --- Firebase Initialisierung ---
 const app = initializeApp(firebaseConfig);
