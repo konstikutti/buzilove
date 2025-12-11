@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { initializeApp } from "firebase/app";
 import {
   getAuth,
@@ -58,12 +58,12 @@ import {
   Star,
   CheckCircle,
   XCircle,
+  Italic,
+  AArrowUp,
 } from "lucide-react";
 
-// --- Firebase Konfiguration (Hybrid) ---
-// 1. Priorität: Interne Config für die Vorschau hier im Chat (damit es sofort geht)
-// 2. Fallback: Deine echten Daten für Vercel/Production
-
+// --- Firebase Konfiguration ---
+// WICHTIG: Ersetze dies mit deinen ECHTEN Daten von der Firebase-Konsole
 const firebaseConfig = {
   apiKey: "AIzaSyAB1iMD8eqVJIgFOW5OLJP0v3SPF02RIVc",
   authDomain: "buzi-tagebuch.firebaseapp.com",
@@ -79,8 +79,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Hybrid App-ID: Nutzt die Sandbox-ID hier, oder deine eigene Live-ID
-const appId = typeof __app_id !== "undefined" ? __app_id : "buzi-tagebuch-live";
+const appId = "buzi-tagebuch-live";
 
 // --- Konstanten & Design ---
 const ACCENT_COLORS = [
@@ -111,6 +110,13 @@ const BG_STYLES = [
     desc: "Nebel",
     css: "bg-white bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-100/40 via-purple-100/20 to-transparent border-purple-100",
   },
+];
+
+const FONT_OPTIONS = [
+  { id: "font-sans", name: "Modern" },
+  { id: "font-serif", name: "Buch" },
+  { id: "font-handwriting", name: "Hand" },
+  { id: "font-mono", name: "Mono" },
 ];
 
 // --- Helfer: Sicheres Datum ---
@@ -199,7 +205,6 @@ const fetchAssets = async (assetIds) => {
       return null;
     }
   });
-
   const results = await Promise.all(promises);
   return results.filter(Boolean);
 };
@@ -378,12 +383,15 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
         type,
         content: "",
         content2: "",
+        sideText: "", // NEU: Text neben Bild
         animation: "none",
         align: "left",
         layout: "center",
         imgStyle: "rounded",
         focus: "50% 50%",
         focus2: "50% 50%",
+        font: "font-sans", // NEU: Schriftart
+        italic: false, // NEU: Kursiv
       },
     ]);
   const updateBlock = (id, upd) =>
@@ -473,40 +481,74 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                 className="absolute left-2 top-1.5 text-slate-400"
               />
             </div>
-            {["header", "text", "quote"].includes(block.type) && (
-              <div className="flex bg-slate-50 rounded border p-0.5">
+
+            {/* SCHRIFT-EINSTELLUNGEN */}
+            {["header", "text", "quote", "note"].includes(block.type) && (
+              <>
+                <div className="flex bg-slate-50 rounded border p-0.5 ml-2">
+                  <select
+                    value={block.font || "font-sans"}
+                    onChange={(e) =>
+                      updateBlock(block.id, { font: e.target.value })
+                    }
+                    className="text-xs bg-transparent border-none focus:ring-0 py-1 pl-2 pr-6 cursor-pointer"
+                  >
+                    {FONT_OPTIONS.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <button
-                  onClick={() => updateBlock(block.id, { align: "left" })}
-                  className={`p-1 rounded ${
-                    block.align === "left"
-                      ? "bg-white shadow text-black"
-                      : "text-slate-400"
+                  onClick={() =>
+                    updateBlock(block.id, { italic: !block.italic })
+                  }
+                  className={`p-1.5 rounded border ml-1 ${
+                    block.italic
+                      ? "bg-indigo-50 border-indigo-200 text-indigo-600"
+                      : "bg-white border-slate-200 text-slate-400"
                   }`}
+                  title="Kursiv"
                 >
-                  <AlignLeft size={12} />
+                  <Italic size={12} />
                 </button>
-                <button
-                  onClick={() => updateBlock(block.id, { align: "center" })}
-                  className={`p-1 rounded ${
-                    block.align === "center"
-                      ? "bg-white shadow text-black"
-                      : "text-slate-400"
-                  }`}
-                >
-                  <AlignCenter size={12} />
-                </button>
-                <button
-                  onClick={() => updateBlock(block.id, { align: "right" })}
-                  className={`p-1 rounded ${
-                    block.align === "right"
-                      ? "bg-white shadow text-black"
-                      : "text-slate-400"
-                  }`}
-                >
-                  <AlignRight size={12} />
-                </button>
-              </div>
+                <div className="w-px h-4 bg-slate-200 mx-1"></div>
+                <div className="flex bg-slate-50 rounded border p-0.5">
+                  <button
+                    onClick={() => updateBlock(block.id, { align: "left" })}
+                    className={`p-1 rounded ${
+                      block.align === "left"
+                        ? "bg-white shadow text-black"
+                        : "text-slate-400"
+                    }`}
+                  >
+                    <AlignLeft size={12} />
+                  </button>
+                  <button
+                    onClick={() => updateBlock(block.id, { align: "center" })}
+                    className={`p-1 rounded ${
+                      block.align === "center"
+                        ? "bg-white shadow text-black"
+                        : "text-slate-400"
+                    }`}
+                  >
+                    <AlignCenter size={12} />
+                  </button>
+                  <button
+                    onClick={() => updateBlock(block.id, { align: "right" })}
+                    className={`p-1 rounded ${
+                      block.align === "right"
+                        ? "bg-white shadow text-black"
+                        : "text-slate-400"
+                    }`}
+                  >
+                    <AlignRight size={12} />
+                  </button>
+                </div>
+              </>
             )}
+
             {block.type === "image" && (
               <div className="flex bg-slate-50 rounded border p-0.5">
                 <button
@@ -516,6 +558,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                       ? "bg-white shadow text-indigo-600"
                       : "text-slate-400"
                   }`}
+                  title="Bild Links + Text"
                 >
                   <PanelLeft size={12} />
                 </button>
@@ -536,6 +579,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                       ? "bg-white shadow text-indigo-600"
                       : "text-slate-400"
                   }`}
+                  title="Bild Rechts + Text"
                 >
                   <PanelRight size={12} />
                 </button>
@@ -560,7 +604,9 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                 updateBlock(block.id, { content: e.target.value })
               }
               placeholder="Überschrift..."
-              className={`w-full text-xl font-bold bg-transparent border-none focus:ring-0 px-0 text-${block.align}`}
+              className={`w-full text-xl font-bold bg-transparent border-none focus:ring-0 px-0 text-${
+                block.align
+              } ${block.font || "font-sans"} ${block.italic ? "italic" : ""}`}
             />
           )}
           {block.type === "text" && (
@@ -570,7 +616,9 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                 updateBlock(block.id, { content: e.target.value })
               }
               placeholder="Erzähl die Story..."
-              className={`w-full min-h-[80px] bg-transparent border-none focus:ring-0 resize-none px-0 text-${block.align}`}
+              className={`w-full min-h-[80px] bg-transparent border-none focus:ring-0 resize-none px-0 text-${
+                block.align
+              } ${block.font || "font-sans"} ${block.italic ? "italic" : ""}`}
             />
           )}
           {block.type === "quote" && (
@@ -581,7 +629,9 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                   updateBlock(block.id, { content: e.target.value })
                 }
                 placeholder="Insider / Zitat..."
-                className="w-full bg-transparent italic text-lg border-none focus:ring-0 text-center"
+                className={`w-full bg-transparent italic text-lg border-none focus:ring-0 text-center ${
+                  block.font || "font-serif"
+                } ${block.italic ? "italic" : ""}`}
               />
             </div>
           )}
@@ -598,7 +648,9 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                   updateBlock(block.id, { content: e.target.value })
                 }
                 placeholder="Randnotiz..."
-                className="w-full bg-transparent text-amber-900 border-none focus:ring-0 text-sm"
+                className={`w-full bg-transparent text-amber-900 border-none focus:ring-0 text-sm ${
+                  block.font || "font-sans"
+                } ${block.italic ? "italic" : ""}`}
               />
             </div>
           )}
@@ -622,13 +674,31 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                     }
                     className="h-48 w-full rounded border border-slate-200"
                   />
+
+                  {/* SIDE TEXT INPUT - Nur wenn Layout Left/Right */}
+                  {(block.layout === "left" || block.layout === "right") && (
+                    <div className="mt-2 border-t pt-2 border-slate-100">
+                      <label className="text-[10px] text-slate-400 font-bold uppercase mb-1 block">
+                        Text daneben (mittig)
+                      </label>
+                      <textarea
+                        value={block.sideText || ""}
+                        onChange={(e) =>
+                          updateBlock(block.id, { sideText: e.target.value })
+                        }
+                        placeholder="Schreib etwas zum Bild..."
+                        className="w-full text-sm bg-white border border-slate-200 rounded p-2 focus:ring-1 focus:ring-indigo-200 min-h-[60px]"
+                      />
+                    </div>
+                  )}
+
                   <input
                     value={block.caption || ""}
                     onChange={(e) =>
                       updateBlock(block.id, { caption: e.target.value })
                     }
-                    placeholder="Bildunterschrift..."
-                    className="text-xs bg-white border p-2 rounded w-full"
+                    placeholder="Bildunterschrift (unten)..."
+                    className="text-xs bg-white border p-2 rounded w-full mt-1"
                   />
                 </div>
               )}
@@ -855,11 +925,14 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
       classes += "w-full block clear-both md:-mx-12 md:w-[calc(100%+6rem)]";
       imgStyle += "rounded-lg md:rounded-none h-[300px] md:h-[600px]";
     } else if (layout === "left") {
-      classes += "float-left w-1/2 md:w-5/12 mr-6 mb-4 clear-left";
-      imgStyle += "rounded-2xl shadow-md";
+      // FIX: Flex-Layout für Links
+      classes += "flex flex-col md:flex-row items-center gap-8 clear-both";
+      imgStyle += "rounded-2xl shadow-md w-full"; // Breite wird vom Wrapper gesteuert
     } else if (layout === "right") {
-      classes += "float-right w-1/2 md:w-5/12 ml-6 mb-4 clear-right";
-      imgStyle += "rounded-2xl shadow-md";
+      // FIX: Flex-Layout für Rechts (Reverse)
+      classes +=
+        "flex flex-col md:flex-row-reverse items-center gap-8 clear-both";
+      imgStyle += "rounded-2xl shadow-md w-full";
     } else {
       classes += "w-full block clear-both";
       imgStyle += "rounded-2xl shadow-md";
@@ -876,10 +949,10 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
         <div
           key={b.id}
           className={`${getAnim(b.animation)} ${
-            ["text", "header", "quote", "divider"].includes(b.type)
-              ? "clear-both"
-              : ""
-          } text-${b.align || "left"}`}
+            ["header", "quote", "divider"].includes(b.type) ? "clear-both" : ""
+          } text-${b.align || "left"} ${b.font || "font-sans"} ${
+            b.italic ? "italic" : ""
+          }`}
         >
           {b.type === "header" && (
             <h3
@@ -926,6 +999,7 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
             </div>
           )}
 
+          {/* BILD BLOCK MIT NEUER SIDE-TEXT LOGIK */}
           {b.type === "image" &&
             b.content &&
             (() => {
@@ -933,20 +1007,39 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
                 b.layout,
                 b.imgStyle
               );
+              // Check if we use the new Flex layout (Left/Right)
+              const isSideLayout = b.layout === "left" || b.layout === "right";
+
               return (
-                <figure className={classes}>
-                  <img
-                    src={b.content}
-                    className={imgStyle}
-                    style={{ objectPosition: b.focus || "50% 50%" }}
-                    onError={(e) => (e.target.style.display = "none")}
-                  />
-                  {b.caption && (
-                    <figcaption className="text-center text-xs text-slate-500 mt-2 italic">
-                      {b.caption}
-                    </figcaption>
+                <div
+                  className={
+                    isSideLayout ? classes : `my-6 relative ${classes}`
+                  }
+                >
+                  {/* BILD CONTAINER */}
+                  <div className={isSideLayout ? "w-full md:w-1/2" : ""}>
+                    <figure>
+                      <img
+                        src={b.content}
+                        className={imgStyle}
+                        style={{ objectPosition: b.focus || "50% 50%" }}
+                        onError={(e) => (e.target.style.display = "none")}
+                      />
+                      {b.caption && (
+                        <figcaption className="text-center text-xs text-slate-500 mt-2 italic">
+                          {b.caption}
+                        </figcaption>
+                      )}
+                    </figure>
+                  </div>
+
+                  {/* SIDE TEXT CONTAINER (nur bei Side Layout und wenn Text existiert) */}
+                  {isSideLayout && b.sideText && (
+                    <div className="w-full md:w-1/2 text-lg text-slate-600 leading-relaxed whitespace-pre-wrap font-serif italic flex items-center justify-center">
+                      <div className="max-w-prose">{b.sideText}</div>
+                    </div>
                   )}
-                </figure>
+                </div>
               );
             })()}
 
@@ -1043,14 +1136,14 @@ const MemoryCard = ({ memory, onClick }) => {
   const getPreviewText = () => {
     if (!blocks) return "";
     const hydrated = hydrateBlocks(blocks, images);
-    // Suche nach dem ersten Block, der Text enthält
     const textBlock = hydrated.find(
       (b) =>
-        (b.type === "text" || b.type === "quote" || b.type === "note") &&
-        b.content &&
-        b.content.trim().length > 0
+        ((b.type === "text" || b.type === "quote" || b.type === "note") &&
+          b.content &&
+          b.content.trim().length > 0) ||
+        (b.sideText && b.sideText.trim().length > 0)
     );
-    return textBlock ? textBlock.content : "";
+    return textBlock ? textBlock.content || textBlock.sideText : "";
   };
   const previewText = getPreviewText();
 
