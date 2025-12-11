@@ -57,24 +57,22 @@ import {
   Move,
   Star,
   CheckCircle,
-  XCircle
+  XCircle,
 } from "lucide-react";
 
 // --- Firebase Konfiguration (Hybrid) ---
 // 1. Priorität: Interne Config für die Vorschau hier im Chat (damit es sofort geht)
 // 2. Fallback: Deine echten Daten für Vercel/Production
-let firebaseConfig;
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyAB1iMD8eqVJIgFOW5OLJP0v3SPF02RIVc",
-    authDomain: "buzi-tagebuch.firebaseapp.com",
-    projectId: "buzi-tagebuch",
-    storageBucket: "buzi-tagebuch.firebasestorage.app",
-    messagingSenderId: "1090406194300",
-    appId: "1:1090406194300:web:f48ff12c0ec1248a2d3df9",
-    measurementId: "G-5R85SV3KXC"
-  };
-}
+const firebaseConfig = {
+  apiKey: "AIzaSyAB1iMD8eqVJIgFOW5OLJP0v3SPF02RIVc",
+  authDomain: "buzi-tagebuch.firebaseapp.com",
+  projectId: "buzi-tagebuch",
+  storageBucket: "buzi-tagebuch.firebasestorage.app",
+  messagingSenderId: "1090406194300",
+  appId: "1:1090406194300:web:f48ff12c0ec1248a2d3df9",
+  measurementId: "G-5R85SV3KXC",
+};
 
 // --- Firebase Initialisierung ---
 const app = initializeApp(firebaseConfig);
@@ -82,7 +80,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 // Hybrid App-ID: Nutzt die Sandbox-ID hier, oder deine eigene Live-ID
-const appId = typeof __app_id !== 'undefined' ? __app_id : "buzi-tagebuch-live";
+const appId = typeof __app_id !== "undefined" ? __app_id : "buzi-tagebuch-live";
 
 // --- Konstanten & Design ---
 const ACCENT_COLORS = [
@@ -95,7 +93,12 @@ const ACCENT_COLORS = [
 ];
 
 const BG_STYLES = [
-  { id: "clean", name: "Clean", desc: "Weiß", css: "bg-white border-slate-200" },
+  {
+    id: "clean",
+    name: "Clean",
+    desc: "Weiß",
+    css: "bg-white border-slate-200",
+  },
   {
     id: "soft",
     name: "Soft",
@@ -112,18 +115,18 @@ const BG_STYLES = [
 
 // --- Helfer: Sicheres Datum ---
 const formatDateSafe = (dateInput) => {
-    if (!dateInput) return '';
-    try {
-        const d = dateInput.toDate ? dateInput.toDate() : new Date(dateInput);
-        if (isNaN(d.getTime())) return ''; 
-        return d.toLocaleDateString('de-DE', { 
-            day: 'numeric', 
-            month: 'long', 
-            year: 'numeric' 
-        });
-    } catch (e) {
-        return '';
-    }
+  if (!dateInput) return "";
+  try {
+    const d = dateInput.toDate ? dateInput.toDate() : new Date(dateInput);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleDateString("de-DE", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  } catch (e) {
+    return "";
+  }
 };
 
 // --- Helfer: Intelligente Bildkomprimierung ---
@@ -1038,11 +1041,16 @@ const MemoryCard = ({ memory, onClick }) => {
 
   // FIX: Bessere Text-Suche für die Vorschau
   const getPreviewText = () => {
-      if (!blocks) return "";
-      const hydrated = hydrateBlocks(blocks, images);
-      // Suche nach dem ersten Block, der Text enthält
-      const textBlock = hydrated.find(b => (b.type === 'text' || b.type === 'quote' || b.type === 'note') && b.content && b.content.trim().length > 0);
-      return textBlock ? textBlock.content : "";
+    if (!blocks) return "";
+    const hydrated = hydrateBlocks(blocks, images);
+    // Suche nach dem ersten Block, der Text enthält
+    const textBlock = hydrated.find(
+      (b) =>
+        (b.type === "text" || b.type === "quote" || b.type === "note") &&
+        b.content &&
+        b.content.trim().length > 0
+    );
+    return textBlock ? textBlock.content : "";
   };
   const previewText = getPreviewText();
 
@@ -1403,8 +1411,7 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
                         : "opacity-80 hover:opacity-100"
                     }`}
                     style={{
-                      borderColor:
-                        activeImg === i ? accent.hex : "transparent",
+                      borderColor: activeImg === i ? accent.hex : "transparent",
                       "--tw-ring-color": accent.hex,
                     }}
                   >
@@ -1448,7 +1455,7 @@ export default function App() {
     images: [],
     blocks: [],
     date: new Date().toISOString().split("T")[0],
-    coverImage: "", 
+    coverImage: "",
   });
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -1543,7 +1550,7 @@ export default function App() {
     const editableBlocks = memory.blocks
       ? hydrateBlocks(memory.blocks, imgs)
       : [{ id: 1, type: "text", content: memory.content || "" }];
-    
+
     const data = {
       ...memory,
       images: imgs,
@@ -1562,20 +1569,24 @@ export default function App() {
 
   // Guard for leaving editor
   const handleExitEditor = () => {
-      if (editingId && hasChanges) {
-          if (window.confirm("Du hast ungespeicherte Änderungen. Wirklich verlassen?")) {
-              setView("home");
-          }
-      } else {
-          setView("home");
+    if (editingId && hasChanges) {
+      if (
+        window.confirm("Du hast ungespeicherte Änderungen. Wirklich verlassen?")
+      ) {
+        setView("home");
       }
+    } else {
+      setView("home");
+    }
   };
 
   const handleSave = async () => {
     if (!formData.title) return alert("Titel fehlt!");
     setIsSaving(true);
     try {
-      const sourceImage = formData.coverImage || (formData.images.length > 0 ? formData.images[0] : null);
+      const sourceImage =
+        formData.coverImage ||
+        (formData.images.length > 0 ? formData.images[0] : null);
       let previewImage = "";
       if (sourceImage) {
         const blob = await fetch(sourceImage).then((r) => r.blob());
@@ -1646,9 +1657,9 @@ export default function App() {
       setIsSaving(false);
     }
   };
-  
+
   const triggerDelete = () => {
-      setShowDeleteConfirm(true);
+    setShowDeleteConfirm(true);
   };
 
   const confirmDelete = async () => {
@@ -1710,47 +1721,56 @@ export default function App() {
             <Button variant="ghost" onClick={handleExitEditor}>
               <ChevronLeft />
             </Button>
-            <h2 className="font-bold">{editingId ? 'Eintrag bearbeiten' : 'Neuer Eintrag'}</h2>
+            <h2 className="font-bold">
+              {editingId ? "Eintrag bearbeiten" : "Neuer Eintrag"}
+            </h2>
           </div>
           <div className="flex gap-3 items-center">
             <div className="text-xs text-slate-400 mr-2 flex items-center gap-1">
               <Database size={12} /> Bilder werden extern gespeichert
             </div>
-            {editingId && (
-                showDeleteConfirm ? (
-                    <div className="flex items-center gap-2 bg-red-50 p-1 rounded-lg border border-red-100 animate-in fade-in slide-in-from-right-4">
-                        <span className="text-xs text-red-600 font-bold ml-2">Wirklich?</span>
-                        <button 
-                            onClick={confirmDelete} 
-                            disabled={isDeleting}
-                            className="bg-red-500 text-white p-1.5 rounded hover:bg-red-600 transition-colors"
-                        >
-                            {isDeleting ? <Loader2 size={14} className="animate-spin"/> : <CheckCircle size={14} />}
-                        </button>
-                        <button 
-                            onClick={() => setShowDeleteConfirm(false)}
-                            className="bg-white text-slate-500 p-1.5 rounded border hover:bg-slate-50 transition-colors"
-                        >
-                            <XCircle size={14} />
-                        </button>
-                    </div>
-                ) : (
-                    <Button variant="danger" onClick={triggerDelete}>
-                        <Trash2 size={16} />
-                    </Button>
-                )
-            )}
-            <Button 
-                variant="primary" 
-                onClick={handleSave} 
-                disabled={isSaving || (editingId && !hasChanges)}
+            {editingId &&
+              (showDeleteConfirm ? (
+                <div className="flex items-center gap-2 bg-red-50 p-1 rounded-lg border border-red-100 animate-in fade-in slide-in-from-right-4">
+                  <span className="text-xs text-red-600 font-bold ml-2">
+                    Wirklich?
+                  </span>
+                  <button
+                    onClick={confirmDelete}
+                    disabled={isDeleting}
+                    className="bg-red-500 text-white p-1.5 rounded hover:bg-red-600 transition-colors"
+                  >
+                    {isDeleting ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <CheckCircle size={14} />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setShowDeleteConfirm(false)}
+                    className="bg-white text-slate-500 p-1.5 rounded border hover:bg-slate-50 transition-colors"
+                  >
+                    <XCircle size={14} />
+                  </button>
+                </div>
+              ) : (
+                <Button variant="danger" onClick={triggerDelete}>
+                  <Trash2 size={16} />
+                </Button>
+              ))}
+            <Button
+              variant="primary"
+              onClick={handleSave}
+              disabled={isSaving || (editingId && !hasChanges)}
             >
               {isSaving ? (
                 <>
                   <Loader2 className="animate-spin mr-2" /> Speichere...
                 </>
+              ) : editingId ? (
+                "Änderungen speichern"
               ) : (
-                editingId ? "Änderungen speichern" : "Veröffentlichen"
+                "Veröffentlichen"
               )}
             </Button>
           </div>
@@ -1795,7 +1815,9 @@ export default function App() {
                 images={formData.images}
                 onChange={(i) => setFormData({ ...formData, images: i })}
                 coverImage={formData.coverImage}
-                onSetCover={(img) => setFormData({ ...formData, coverImage: img })}
+                onSetCover={(img) =>
+                  setFormData({ ...formData, coverImage: img })
+                }
               />
             </section>
           </div>
@@ -1805,10 +1827,101 @@ export default function App() {
                 <Palette size={14} /> Design
               </h3>
               <div className="space-y-6">
-                <div><label className="block text-xs font-bold text-slate-500 mb-2">Akzentfarbe</label><div className="flex gap-2 flex-wrap">{ACCENT_COLORS.map((c) => <button key={c.id} onClick={() => setFormData({ ...formData, accentColor: c.id })} className={`w-8 h-8 rounded-full transition-all ${formData.accentColor === c.id ? "ring-2 ring-offset-2 ring-slate-400 scale-110" : "hover:scale-105"}`} style={{ backgroundColor: c.hex }} title={c.name} />)}</div></div>
-                <div><label className="block text-xs font-bold text-slate-500 mb-2">Hintergrund</label><div className="grid grid-cols-3 gap-2">{BG_STYLES.map((s) => <button key={s.id} onClick={() => setFormData({ ...formData, bgStyle: s.id })} className={`h-12 rounded-lg border flex items-center justify-center text-[10px] font-bold uppercase transition-all ${formData.bgStyle === s.id ? "ring-2 ring-indigo-500 border-transparent" : "hover:border-slate-300"}`}><div className={`w-full h-full rounded-md ${s.id === "soft" ? "bg-gradient-to-br from-white via-slate-100 to-white" : s.id === "mesh" ? "bg-indigo-50" : "bg-white"}`}></div><span className="absolute">{s.name}</span></button>)}</div></div>
-                <div><label className="block text-xs font-bold text-slate-500 mb-2">Titelbild</label><div className="flex gap-2"><button onClick={() => setFormData({ ...formData, heroStyle: "compact" })} className={`flex-1 p-2 border rounded-lg flex flex-col items-center gap-2 ${formData.heroStyle === "compact" ? "bg-indigo-50 border-indigo-500 text-indigo-700" : "hover:bg-slate-50"}`}><div className="w-full h-8 bg-slate-200 rounded-md"></div><span className="text-[10px] font-bold">Kompakt</span></button><button onClick={() => setFormData({ ...formData, heroStyle: "full" })} className={`flex-1 p-2 border rounded-lg flex flex-col items-center gap-2 ${formData.heroStyle === "full" ? "bg-indigo-50 border-indigo-500 text-indigo-700" : "hover:bg-slate-50"}`}><div className="w-full h-8 bg-slate-800 rounded-md"></div><span className="text-[10px] font-bold">Vollbild</span></button></div></div>
-                <div className="border-t pt-4"><label className="block text-xs font-bold text-slate-500 mb-2">Karten-Stil (Vorschau)</label><ThemeSelector selected={formData.theme} onSelect={(t) => setFormData({ ...formData, theme: t })} /></div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-2">
+                    Akzentfarbe
+                  </label>
+                  <div className="flex gap-2 flex-wrap">
+                    {ACCENT_COLORS.map((c) => (
+                      <button
+                        key={c.id}
+                        onClick={() =>
+                          setFormData({ ...formData, accentColor: c.id })
+                        }
+                        className={`w-8 h-8 rounded-full transition-all ${
+                          formData.accentColor === c.id
+                            ? "ring-2 ring-offset-2 ring-slate-400 scale-110"
+                            : "hover:scale-105"
+                        }`}
+                        style={{ backgroundColor: c.hex }}
+                        title={c.name}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-2">
+                    Hintergrund
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {BG_STYLES.map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() =>
+                          setFormData({ ...formData, bgStyle: s.id })
+                        }
+                        className={`h-12 rounded-lg border flex items-center justify-center text-[10px] font-bold uppercase transition-all ${
+                          formData.bgStyle === s.id
+                            ? "ring-2 ring-indigo-500 border-transparent"
+                            : "hover:border-slate-300"
+                        }`}
+                      >
+                        <div
+                          className={`w-full h-full rounded-md ${
+                            s.id === "soft"
+                              ? "bg-gradient-to-br from-white via-slate-100 to-white"
+                              : s.id === "mesh"
+                              ? "bg-indigo-50"
+                              : "bg-white"
+                          }`}
+                        ></div>
+                        <span className="absolute">{s.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-2">
+                    Titelbild
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() =>
+                        setFormData({ ...formData, heroStyle: "compact" })
+                      }
+                      className={`flex-1 p-2 border rounded-lg flex flex-col items-center gap-2 ${
+                        formData.heroStyle === "compact"
+                          ? "bg-indigo-50 border-indigo-500 text-indigo-700"
+                          : "hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="w-full h-8 bg-slate-200 rounded-md"></div>
+                      <span className="text-[10px] font-bold">Kompakt</span>
+                    </button>
+                    <button
+                      onClick={() =>
+                        setFormData({ ...formData, heroStyle: "full" })
+                      }
+                      className={`flex-1 p-2 border rounded-lg flex flex-col items-center gap-2 ${
+                        formData.heroStyle === "full"
+                          ? "bg-indigo-50 border-indigo-500 text-indigo-700"
+                          : "hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="w-full h-8 bg-slate-800 rounded-md"></div>
+                      <span className="text-[10px] font-bold">Vollbild</span>
+                    </button>
+                  </div>
+                </div>
+                <div className="border-t pt-4">
+                  <label className="block text-xs font-bold text-slate-500 mb-2">
+                    Karten-Stil (Vorschau)
+                  </label>
+                  <ThemeSelector
+                    selected={formData.theme}
+                    onSelect={(t) => setFormData({ ...formData, theme: t })}
+                  />
+                </div>
               </div>
             </section>
           </div>
