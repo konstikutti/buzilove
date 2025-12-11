@@ -5,6 +5,7 @@ import {
   signInAnonymously,
   onAuthStateChanged,
   updateProfile,
+  signInWithCustomToken,
 } from "firebase/auth";
 import {
   getFirestore,
@@ -59,11 +60,11 @@ import {
   CheckCircle,
   XCircle,
   Italic,
-  AArrowUp,
+  Bold, 
+  AArrowUp
 } from "lucide-react";
 
 // --- Firebase Konfiguration ---
-// WICHTIG: Ersetze dies mit deinen ECHTEN Daten von der Firebase-Konsole
 const firebaseConfig = {
   apiKey: "AIzaSyAB1iMD8eqVJIgFOW5OLJP0v3SPF02RIVc",
   authDomain: "buzi-tagebuch.firebaseapp.com",
@@ -92,12 +93,7 @@ const ACCENT_COLORS = [
 ];
 
 const BG_STYLES = [
-  {
-    id: "clean",
-    name: "Clean",
-    desc: "Weiß",
-    css: "bg-white border-slate-200",
-  },
+  { id: "clean", name: "Clean", desc: "Weiß", css: "bg-white border-slate-200" },
   {
     id: "soft",
     name: "Soft",
@@ -113,26 +109,26 @@ const BG_STYLES = [
 ];
 
 const FONT_OPTIONS = [
-  { id: "font-sans", name: "Modern" },
-  { id: "font-serif", name: "Buch" },
-  { id: "font-handwriting", name: "Hand" },
-  { id: "font-mono", name: "Mono" },
+    { id: 'font-sans', name: 'Modern' },
+    { id: 'font-serif', name: 'Buch' },
+    { id: 'font-handwriting', name: 'Hand' },
+    { id: 'font-mono', name: 'Mono' },
 ];
 
 // --- Helfer: Sicheres Datum ---
 const formatDateSafe = (dateInput) => {
-  if (!dateInput) return "";
-  try {
-    const d = dateInput.toDate ? dateInput.toDate() : new Date(dateInput);
-    if (isNaN(d.getTime())) return "";
-    return d.toLocaleDateString("de-DE", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
-  } catch (e) {
-    return "";
-  }
+    if (!dateInput) return '';
+    try {
+        const d = dateInput.toDate ? dateInput.toDate() : new Date(dateInput);
+        if (isNaN(d.getTime())) return ''; 
+        return d.toLocaleDateString('de-DE', { 
+            day: 'numeric', 
+            month: 'long', 
+            year: 'numeric' 
+        });
+    } catch (e) {
+        return '';
+    }
 };
 
 // --- Helfer: Intelligente Bildkomprimierung ---
@@ -205,6 +201,7 @@ const fetchAssets = async (assetIds) => {
       return null;
     }
   });
+
   const results = await Promise.all(promises);
   return results.filter(Boolean);
 };
@@ -383,15 +380,16 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
         type,
         content: "",
         content2: "",
-        sideText: "", // NEU: Text neben Bild
+        sideText: "",
         animation: "none",
         align: "left",
         layout: "center",
         imgStyle: "rounded",
         focus: "50% 50%",
         focus2: "50% 50%",
-        font: "font-sans", // NEU: Schriftart
-        italic: false, // NEU: Kursiv
+        font: "font-sans", 
+        italic: false,
+        bold: false
       },
     ]);
   const updateBlock = (id, upd) =>
@@ -435,6 +433,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
           key={block.id}
           className="group relative bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-indigo-300 transition-all"
         >
+          {/* Controls: Jetzt mit Padding-Right Schutz, damit nichts verdeckt wird */}
           <div className="absolute right-2 top-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 backdrop-blur p-1 rounded-lg border border-slate-100 shadow-sm z-20">
             <Button
               variant="icon"
@@ -462,7 +461,8 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
             </Button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 mb-3 border-b border-slate-50 pb-2">
+          {/* FIX: pr-24 added so buttons don't slide under delete controls */}
+          <div className="flex flex-wrap items-center gap-2 mb-3 border-b border-slate-50 pb-2 pr-24 relative">
             <div className="relative">
               <select
                 value={block.animation || "none"}
@@ -481,76 +481,52 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                 className="absolute left-2 top-1.5 text-slate-400"
               />
             </div>
-
+            
             {/* SCHRIFT-EINSTELLUNGEN */}
-            {["header", "text", "quote", "note"].includes(block.type) && (
-              <>
-                <div className="flex bg-slate-50 rounded border p-0.5 ml-2">
-                  <select
-                    value={block.font || "font-sans"}
-                    onChange={(e) =>
-                      updateBlock(block.id, { font: e.target.value })
-                    }
-                    className="text-xs bg-transparent border-none focus:ring-0 py-1 pl-2 pr-6 cursor-pointer"
-                  >
-                    {FONT_OPTIONS.map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <button
-                  onClick={() =>
-                    updateBlock(block.id, { italic: !block.italic })
-                  }
-                  className={`p-1.5 rounded border ml-1 ${
-                    block.italic
-                      ? "bg-indigo-50 border-indigo-200 text-indigo-600"
-                      : "bg-white border-slate-200 text-slate-400"
-                  }`}
-                  title="Kursiv"
-                >
-                  <Italic size={12} />
-                </button>
-                <div className="w-px h-4 bg-slate-200 mx-1"></div>
-                <div className="flex bg-slate-50 rounded border p-0.5">
-                  <button
-                    onClick={() => updateBlock(block.id, { align: "left" })}
-                    className={`p-1 rounded ${
-                      block.align === "left"
-                        ? "bg-white shadow text-black"
-                        : "text-slate-400"
-                    }`}
-                  >
-                    <AlignLeft size={12} />
-                  </button>
-                  <button
-                    onClick={() => updateBlock(block.id, { align: "center" })}
-                    className={`p-1 rounded ${
-                      block.align === "center"
-                        ? "bg-white shadow text-black"
-                        : "text-slate-400"
-                    }`}
-                  >
-                    <AlignCenter size={12} />
-                  </button>
-                  <button
-                    onClick={() => updateBlock(block.id, { align: "right" })}
-                    className={`p-1 rounded ${
-                      block.align === "right"
-                        ? "bg-white shadow text-black"
-                        : "text-slate-400"
-                    }`}
-                  >
-                    <AlignRight size={12} />
-                  </button>
-                </div>
-              </>
+            {(["header", "text", "quote", "note"].includes(block.type) || (block.type === 'image' && (block.layout === 'left' || block.layout === 'right'))) && (
+                <>
+                    <div className="flex bg-slate-50 rounded border p-0.5 ml-2">
+                        <select 
+                            value={block.font || 'font-sans'} 
+                            onChange={(e) => updateBlock(block.id, { font: e.target.value })}
+                            className="text-xs bg-transparent border-none focus:ring-0 py-1 pl-2 pr-6 cursor-pointer"
+                        >
+                            {FONT_OPTIONS.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                        </select>
+                    </div>
+                    <div className="flex gap-1 ml-1">
+                        <button 
+                            onClick={() => updateBlock(block.id, { bold: !block.bold })}
+                            className={`p-1.5 rounded border ${block.bold ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-white border-slate-200 text-slate-400'}`}
+                            title="Fett"
+                        >
+                            <Bold size={12}/>
+                        </button>
+                        <button 
+                            onClick={() => updateBlock(block.id, { italic: !block.italic })}
+                            className={`p-1.5 rounded border ${block.italic ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-white border-slate-200 text-slate-400'}`}
+                            title="Kursiv"
+                        >
+                            <Italic size={12}/>
+                        </button>
+                    </div>
+                </>
+            )}
+
+             {/* Align Buttons nur für reine Textblöcke */}
+             {["header", "text", "quote"].includes(block.type) && (
+                <>
+                    <div className="w-px h-4 bg-slate-200 mx-1"></div>
+                    <div className="flex bg-slate-50 rounded border p-0.5">
+                        <button onClick={() => updateBlock(block.id, { align: "left" })} className={`p-1 rounded ${block.align === "left" ? "bg-white shadow text-black" : "text-slate-400"}`}><AlignLeft size={12} /></button>
+                        <button onClick={() => updateBlock(block.id, { align: "center" })} className={`p-1 rounded ${block.align === "center" ? "bg-white shadow text-black" : "text-slate-400"}`}><AlignCenter size={12} /></button>
+                        <button onClick={() => updateBlock(block.id, { align: "right" })} className={`p-1 rounded ${block.align === "right" ? "bg-white shadow text-black" : "text-slate-400"}`}><AlignRight size={12} /></button>
+                    </div>
+                </>
             )}
 
             {block.type === "image" && (
-              <div className="flex bg-slate-50 rounded border p-0.5">
+              <div className="flex bg-slate-50 rounded border p-0.5 ml-2">
                 <button
                   onClick={() => updateBlock(block.id, { layout: "left" })}
                   className={`p-1 rounded ${
@@ -604,9 +580,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                 updateBlock(block.id, { content: e.target.value })
               }
               placeholder="Überschrift..."
-              className={`w-full text-xl font-bold bg-transparent border-none focus:ring-0 px-0 text-${
-                block.align
-              } ${block.font || "font-sans"} ${block.italic ? "italic" : ""}`}
+              className={`w-full text-xl font-bold bg-transparent border-none focus:ring-0 px-0 text-${block.align} ${block.font || 'font-sans'} ${block.italic ? 'italic' : ''}`}
             />
           )}
           {block.type === "text" && (
@@ -616,9 +590,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                 updateBlock(block.id, { content: e.target.value })
               }
               placeholder="Erzähl die Story..."
-              className={`w-full min-h-[80px] bg-transparent border-none focus:ring-0 resize-none px-0 text-${
-                block.align
-              } ${block.font || "font-sans"} ${block.italic ? "italic" : ""}`}
+              className={`w-full min-h-[80px] bg-transparent border-none focus:ring-0 resize-none px-0 text-${block.align} ${block.font || 'font-sans'} ${block.italic ? 'italic' : ''} ${block.bold ? 'font-bold' : ''}`}
             />
           )}
           {block.type === "quote" && (
@@ -629,9 +601,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                   updateBlock(block.id, { content: e.target.value })
                 }
                 placeholder="Insider / Zitat..."
-                className={`w-full bg-transparent italic text-lg border-none focus:ring-0 text-center ${
-                  block.font || "font-serif"
-                } ${block.italic ? "italic" : ""}`}
+                className={`w-full bg-transparent text-lg border-none focus:ring-0 text-center ${block.font || 'font-serif'} ${block.italic ? 'italic' : ''} ${block.bold ? 'font-bold' : ''}`}
               />
             </div>
           )}
@@ -648,9 +618,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                   updateBlock(block.id, { content: e.target.value })
                 }
                 placeholder="Randnotiz..."
-                className={`w-full bg-transparent text-amber-900 border-none focus:ring-0 text-sm ${
-                  block.font || "font-sans"
-                } ${block.italic ? "italic" : ""}`}
+                className={`w-full bg-transparent text-amber-900 border-none focus:ring-0 text-sm ${block.font || 'font-sans'} ${block.italic ? 'italic' : ''} ${block.bold ? 'font-bold' : ''}`}
               />
             </div>
           )}
@@ -674,22 +642,18 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                     }
                     className="h-48 w-full rounded border border-slate-200"
                   />
-
-                  {/* SIDE TEXT INPUT - Nur wenn Layout Left/Right */}
-                  {(block.layout === "left" || block.layout === "right") && (
-                    <div className="mt-2 border-t pt-2 border-slate-100">
-                      <label className="text-[10px] text-slate-400 font-bold uppercase mb-1 block">
-                        Text daneben (mittig)
-                      </label>
-                      <textarea
-                        value={block.sideText || ""}
-                        onChange={(e) =>
-                          updateBlock(block.id, { sideText: e.target.value })
-                        }
-                        placeholder="Schreib etwas zum Bild..."
-                        className="w-full text-sm bg-white border border-slate-200 rounded p-2 focus:ring-1 focus:ring-indigo-200 min-h-[60px]"
-                      />
-                    </div>
+                  
+                  {/* SIDE TEXT INPUT */}
+                  {(block.layout === 'left' || block.layout === 'right') && (
+                      <div className="mt-2 border-t pt-2 border-slate-100">
+                          <label className="text-[10px] text-slate-400 font-bold uppercase mb-1 block">Text daneben (mittig)</label>
+                          <textarea
+                             value={block.sideText || ''}
+                             onChange={(e) => updateBlock(block.id, { sideText: e.target.value })}
+                             placeholder="Schreib etwas zum Bild..."
+                             className={`w-full text-sm bg-white border border-slate-200 rounded p-2 focus:ring-1 focus:ring-indigo-200 min-h-[60px] ${block.font || 'font-sans'} ${block.italic ? 'italic' : ''} ${block.bold ? 'font-bold' : ''}`}
+                          />
+                      </div>
                   )}
 
                   <input
@@ -930,8 +894,7 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
       imgStyle += "rounded-2xl shadow-md w-full"; // Breite wird vom Wrapper gesteuert
     } else if (layout === "right") {
       // FIX: Flex-Layout für Rechts (Reverse)
-      classes +=
-        "flex flex-col md:flex-row-reverse items-center gap-8 clear-both";
+      classes += "flex flex-col md:flex-row-reverse items-center gap-8 clear-both";
       imgStyle += "rounded-2xl shadow-md w-full";
     } else {
       classes += "w-full block clear-both";
@@ -949,10 +912,10 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
         <div
           key={b.id}
           className={`${getAnim(b.animation)} ${
-            ["header", "quote", "divider"].includes(b.type) ? "clear-both" : ""
-          } text-${b.align || "left"} ${b.font || "font-sans"} ${
-            b.italic ? "italic" : ""
-          }`}
+            ["header", "quote", "divider"].includes(b.type)
+              ? "clear-both"
+              : ""
+          } text-${b.align || "left"} ${b.font || 'font-sans'} ${b.italic ? 'italic' : ''} ${b.bold ? 'font-bold' : ''}`}
         >
           {b.type === "header" && (
             <h3
@@ -1008,37 +971,35 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
                 b.imgStyle
               );
               // Check if we use the new Flex layout (Left/Right)
-              const isSideLayout = b.layout === "left" || b.layout === "right";
-
+              const isSideLayout = b.layout === 'left' || b.layout === 'right';
+              
               return (
-                <div
-                  className={
-                    isSideLayout ? classes : `my-6 relative ${classes}`
-                  }
-                >
-                  {/* BILD CONTAINER */}
-                  <div className={isSideLayout ? "w-full md:w-1/2" : ""}>
-                    <figure>
-                      <img
-                        src={b.content}
-                        className={imgStyle}
-                        style={{ objectPosition: b.focus || "50% 50%" }}
-                        onError={(e) => (e.target.style.display = "none")}
-                      />
-                      {b.caption && (
-                        <figcaption className="text-center text-xs text-slate-500 mt-2 italic">
-                          {b.caption}
-                        </figcaption>
-                      )}
-                    </figure>
-                  </div>
-
-                  {/* SIDE TEXT CONTAINER (nur bei Side Layout und wenn Text existiert) */}
-                  {isSideLayout && b.sideText && (
-                    <div className="w-full md:w-1/2 text-lg text-slate-600 leading-relaxed whitespace-pre-wrap font-serif italic flex items-center justify-center">
-                      <div className="max-w-prose">{b.sideText}</div>
+                <div className={isSideLayout ? classes : `my-6 relative ${classes}`}>
+                    {/* BILD CONTAINER */}
+                    <div className={isSideLayout ? "w-full md:w-1/2" : "w-full"}>
+                      <figure>
+                        <img
+                          src={b.content}
+                          className={imgStyle}
+                          style={{ objectPosition: b.focus || "50% 50%" }}
+                          onError={(e) => (e.target.style.display = "none")}
+                        />
+                        {b.caption && (
+                          <figcaption className="text-center text-xs text-slate-500 mt-2 italic">
+                            {b.caption}
+                          </figcaption>
+                        )}
+                      </figure>
                     </div>
-                  )}
+
+                    {/* SIDE TEXT CONTAINER (nur bei Side Layout und wenn Text existiert) */}
+                    {isSideLayout && (
+                        <div className="w-full md:w-1/2 flex items-center justify-center p-4">
+                             <div className={`text-lg leading-relaxed whitespace-pre-wrap ${b.font || 'font-sans'} ${b.italic ? 'italic' : ''} ${b.bold ? 'font-bold' : ''} ${theme === 'cinema' ? 'text-slate-300' : 'text-slate-700'}`}>
+                                {b.sideText}
+                            </div>
+                        </div>
+                    )}
                 </div>
               );
             })()}
@@ -1129,21 +1090,20 @@ const ThemeSelector = ({ selected, onSelect }) => {
 const MemoryCard = ({ memory, onClick }) => {
   const { title, author, date, theme, location, blocks } = memory;
   const images = memory.images || [];
-  const previewImage =
-    memory.previewImage || (images.length > 0 ? images[0] : "");
+  // Use cover image if available, else first image
+  const previewImage = memory.coverImage || memory.previewImage || (images.length > 0 ? images[0] : "");
 
-  // FIX: Bessere Text-Suche für die Vorschau
+  // Extract text for preview
   const getPreviewText = () => {
-    if (!blocks) return "";
-    const hydrated = hydrateBlocks(blocks, images);
-    const textBlock = hydrated.find(
-      (b) =>
-        ((b.type === "text" || b.type === "quote" || b.type === "note") &&
+      if (!blocks) return "";
+      const hydrated = hydrateBlocks(blocks, images);
+      const textBlock = hydrated.find(
+        (b) =>
+          ((b.type === "text" || b.type === "quote" || b.type === "note") &&
           b.content &&
-          b.content.trim().length > 0) ||
-        (b.sideText && b.sideText.trim().length > 0)
-    );
-    return textBlock ? textBlock.content || textBlock.sideText : "";
+          b.content.trim().length > 0) || (b.sideText && b.sideText.trim().length > 0)
+      );
+      return textBlock ? (textBlock.content || textBlock.sideText) : "";
   };
   const previewText = getPreviewText();
 
@@ -1504,7 +1464,8 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
                         : "opacity-80 hover:opacity-100"
                     }`}
                     style={{
-                      borderColor: activeImg === i ? accent.hex : "transparent",
+                      borderColor:
+                        activeImg === i ? accent.hex : "transparent",
                       "--tw-ring-color": accent.hex,
                     }}
                   >
@@ -1548,7 +1509,7 @@ export default function App() {
     images: [],
     blocks: [],
     date: new Date().toISOString().split("T")[0],
-    coverImage: "",
+    coverImage: "", 
   });
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -1643,7 +1604,7 @@ export default function App() {
     const editableBlocks = memory.blocks
       ? hydrateBlocks(memory.blocks, imgs)
       : [{ id: 1, type: "text", content: memory.content || "" }];
-
+    
     const data = {
       ...memory,
       images: imgs,
@@ -1662,24 +1623,20 @@ export default function App() {
 
   // Guard for leaving editor
   const handleExitEditor = () => {
-    if (editingId && hasChanges) {
-      if (
-        window.confirm("Du hast ungespeicherte Änderungen. Wirklich verlassen?")
-      ) {
-        setView("home");
+      if (editingId && hasChanges) {
+          if (window.confirm("Du hast ungespeicherte Änderungen. Wirklich verlassen?")) {
+              setView("home");
+          }
+      } else {
+          setView("home");
       }
-    } else {
-      setView("home");
-    }
   };
 
   const handleSave = async () => {
     if (!formData.title) return alert("Titel fehlt!");
     setIsSaving(true);
     try {
-      const sourceImage =
-        formData.coverImage ||
-        (formData.images.length > 0 ? formData.images[0] : null);
+      const sourceImage = formData.coverImage || (formData.images.length > 0 ? formData.images[0] : null);
       let previewImage = "";
       if (sourceImage) {
         const blob = await fetch(sourceImage).then((r) => r.blob());
@@ -1750,9 +1707,9 @@ export default function App() {
       setIsSaving(false);
     }
   };
-
+  
   const triggerDelete = () => {
-    setShowDeleteConfirm(true);
+      setShowDeleteConfirm(true);
   };
 
   const confirmDelete = async () => {
@@ -1814,56 +1771,47 @@ export default function App() {
             <Button variant="ghost" onClick={handleExitEditor}>
               <ChevronLeft />
             </Button>
-            <h2 className="font-bold">
-              {editingId ? "Eintrag bearbeiten" : "Neuer Eintrag"}
-            </h2>
+            <h2 className="font-bold">{editingId ? 'Eintrag bearbeiten' : 'Neuer Eintrag'}</h2>
           </div>
           <div className="flex gap-3 items-center">
             <div className="text-xs text-slate-400 mr-2 flex items-center gap-1">
               <Database size={12} /> Bilder werden extern gespeichert
             </div>
-            {editingId &&
-              (showDeleteConfirm ? (
-                <div className="flex items-center gap-2 bg-red-50 p-1 rounded-lg border border-red-100 animate-in fade-in slide-in-from-right-4">
-                  <span className="text-xs text-red-600 font-bold ml-2">
-                    Wirklich?
-                  </span>
-                  <button
-                    onClick={confirmDelete}
-                    disabled={isDeleting}
-                    className="bg-red-500 text-white p-1.5 rounded hover:bg-red-600 transition-colors"
-                  >
-                    {isDeleting ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : (
-                      <CheckCircle size={14} />
-                    )}
-                  </button>
-                  <button
-                    onClick={() => setShowDeleteConfirm(false)}
-                    className="bg-white text-slate-500 p-1.5 rounded border hover:bg-slate-50 transition-colors"
-                  >
-                    <XCircle size={14} />
-                  </button>
-                </div>
-              ) : (
-                <Button variant="danger" onClick={triggerDelete}>
-                  <Trash2 size={16} />
-                </Button>
-              ))}
-            <Button
-              variant="primary"
-              onClick={handleSave}
-              disabled={isSaving || (editingId && !hasChanges)}
+            {editingId && (
+                showDeleteConfirm ? (
+                    <div className="flex items-center gap-2 bg-red-50 p-1 rounded-lg border border-red-100 animate-in fade-in slide-in-from-right-4">
+                        <span className="text-xs text-red-600 font-bold ml-2">Wirklich?</span>
+                        <button 
+                            onClick={confirmDelete} 
+                            disabled={isDeleting}
+                            className="bg-red-500 text-white p-1.5 rounded hover:bg-red-600 transition-colors"
+                        >
+                            {isDeleting ? <Loader2 size={14} className="animate-spin"/> : <CheckCircle size={14} />}
+                        </button>
+                        <button 
+                            onClick={() => setShowDeleteConfirm(false)}
+                            className="bg-white text-slate-500 p-1.5 rounded border hover:bg-slate-50 transition-colors"
+                        >
+                            <XCircle size={14} />
+                        </button>
+                    </div>
+                ) : (
+                    <Button variant="danger" onClick={triggerDelete}>
+                        <Trash2 size={16} />
+                    </Button>
+                )
+            )}
+            <Button 
+                variant="primary" 
+                onClick={handleSave} 
+                disabled={isSaving || (editingId && !hasChanges)}
             >
               {isSaving ? (
                 <>
                   <Loader2 className="animate-spin mr-2" /> Speichere...
                 </>
-              ) : editingId ? (
-                "Änderungen speichern"
               ) : (
-                "Veröffentlichen"
+                editingId ? "Änderungen speichern" : "Veröffentlichen"
               )}
             </Button>
           </div>
@@ -1908,9 +1856,7 @@ export default function App() {
                 images={formData.images}
                 onChange={(i) => setFormData({ ...formData, images: i })}
                 coverImage={formData.coverImage}
-                onSetCover={(img) =>
-                  setFormData({ ...formData, coverImage: img })
-                }
+                onSetCover={(img) => setFormData({ ...formData, coverImage: img })}
               />
             </section>
           </div>
@@ -1920,101 +1866,10 @@ export default function App() {
                 <Palette size={14} /> Design
               </h3>
               <div className="space-y-6">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-2">
-                    Akzentfarbe
-                  </label>
-                  <div className="flex gap-2 flex-wrap">
-                    {ACCENT_COLORS.map((c) => (
-                      <button
-                        key={c.id}
-                        onClick={() =>
-                          setFormData({ ...formData, accentColor: c.id })
-                        }
-                        className={`w-8 h-8 rounded-full transition-all ${
-                          formData.accentColor === c.id
-                            ? "ring-2 ring-offset-2 ring-slate-400 scale-110"
-                            : "hover:scale-105"
-                        }`}
-                        style={{ backgroundColor: c.hex }}
-                        title={c.name}
-                      />
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-2">
-                    Hintergrund
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {BG_STYLES.map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() =>
-                          setFormData({ ...formData, bgStyle: s.id })
-                        }
-                        className={`h-12 rounded-lg border flex items-center justify-center text-[10px] font-bold uppercase transition-all ${
-                          formData.bgStyle === s.id
-                            ? "ring-2 ring-indigo-500 border-transparent"
-                            : "hover:border-slate-300"
-                        }`}
-                      >
-                        <div
-                          className={`w-full h-full rounded-md ${
-                            s.id === "soft"
-                              ? "bg-gradient-to-br from-white via-slate-100 to-white"
-                              : s.id === "mesh"
-                              ? "bg-indigo-50"
-                              : "bg-white"
-                          }`}
-                        ></div>
-                        <span className="absolute">{s.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-2">
-                    Titelbild
-                  </label>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() =>
-                        setFormData({ ...formData, heroStyle: "compact" })
-                      }
-                      className={`flex-1 p-2 border rounded-lg flex flex-col items-center gap-2 ${
-                        formData.heroStyle === "compact"
-                          ? "bg-indigo-50 border-indigo-500 text-indigo-700"
-                          : "hover:bg-slate-50"
-                      }`}
-                    >
-                      <div className="w-full h-8 bg-slate-200 rounded-md"></div>
-                      <span className="text-[10px] font-bold">Kompakt</span>
-                    </button>
-                    <button
-                      onClick={() =>
-                        setFormData({ ...formData, heroStyle: "full" })
-                      }
-                      className={`flex-1 p-2 border rounded-lg flex flex-col items-center gap-2 ${
-                        formData.heroStyle === "full"
-                          ? "bg-indigo-50 border-indigo-500 text-indigo-700"
-                          : "hover:bg-slate-50"
-                      }`}
-                    >
-                      <div className="w-full h-8 bg-slate-800 rounded-md"></div>
-                      <span className="text-[10px] font-bold">Vollbild</span>
-                    </button>
-                  </div>
-                </div>
-                <div className="border-t pt-4">
-                  <label className="block text-xs font-bold text-slate-500 mb-2">
-                    Karten-Stil (Vorschau)
-                  </label>
-                  <ThemeSelector
-                    selected={formData.theme}
-                    onSelect={(t) => setFormData({ ...formData, theme: t })}
-                  />
-                </div>
+                <div><label className="block text-xs font-bold text-slate-500 mb-2">Akzentfarbe</label><div className="flex gap-2 flex-wrap">{ACCENT_COLORS.map((c) => <button key={c.id} onClick={() => setFormData({ ...formData, accentColor: c.id })} className={`w-8 h-8 rounded-full transition-all ${formData.accentColor === c.id ? "ring-2 ring-offset-2 ring-slate-400 scale-110" : "hover:scale-105"}`} style={{ backgroundColor: c.hex }} title={c.name} />)}</div></div>
+                <div><label className="block text-xs font-bold text-slate-500 mb-2">Hintergrund</label><div className="grid grid-cols-3 gap-2">{BG_STYLES.map((s) => <button key={s.id} onClick={() => setFormData({ ...formData, bgStyle: s.id })} className={`h-12 rounded-lg border flex items-center justify-center text-[10px] font-bold uppercase transition-all ${formData.bgStyle === s.id ? "ring-2 ring-indigo-500 border-transparent" : "hover:border-slate-300"}`}><div className={`w-full h-full rounded-md ${s.id === "soft" ? "bg-gradient-to-br from-white via-slate-100 to-white" : s.id === "mesh" ? "bg-indigo-50" : "bg-white"}`}></div><span className="absolute">{s.name}</span></button>)}</div></div>
+                <div><label className="block text-xs font-bold text-slate-500 mb-2">Titelbild</label><div className="flex gap-2"><button onClick={() => setFormData({ ...formData, heroStyle: "compact" })} className={`flex-1 p-2 border rounded-lg flex flex-col items-center gap-2 ${formData.heroStyle === "compact" ? "bg-indigo-50 border-indigo-500 text-indigo-700" : "hover:bg-slate-50"}`}><div className="w-full h-8 bg-slate-200 rounded-md"></div><span className="text-[10px] font-bold">Kompakt</span></button><button onClick={() => setFormData({ ...formData, heroStyle: "full" })} className={`flex-1 p-2 border rounded-lg flex flex-col items-center gap-2 ${formData.heroStyle === "full" ? "bg-indigo-50 border-indigo-500 text-indigo-700" : "hover:bg-slate-50"}`}><div className="w-full h-8 bg-slate-800 rounded-md"></div><span className="text-[10px] font-bold">Vollbild</span></button></div></div>
+                <div className="border-t pt-4"><label className="block text-xs font-bold text-slate-500 mb-2">Karten-Stil (Vorschau)</label><ThemeSelector selected={formData.theme} onSelect={(t) => setFormData({ ...formData, theme: t })} /></div>
               </div>
             </section>
           </div>
