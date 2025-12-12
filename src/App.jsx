@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { initializeApp } from "firebase/app";
 import {
   getAuth,
@@ -288,6 +288,65 @@ const Button = ({
   );
 };
 
+// --- LAZY INPUTS (Echte Performance-Optimierung) ---
+// Aktualisieren den Haupt-State NUR beim Verlassen (onBlur), niemals beim Tippen.
+
+const LazyInput = ({ value, onChange, ...props }) => {
+  const [localValue, setLocalValue] = useState(value || "");
+
+  useEffect(() => {
+    setLocalValue(value || "");
+  }, [value]);
+
+  const handleChange = (e) => {
+    setLocalValue(e.target.value);
+  };
+
+  const handleBlur = (e) => {
+    // Wenn sich der Wert geändert hat, sende ihn an den Hauptspeicher
+    if (onChange && localValue !== value) {
+      onChange({ target: { value: localValue } });
+    }
+  };
+
+  return (
+    <input 
+      value={localValue} 
+      onChange={handleChange} 
+      onBlur={handleBlur} 
+      {...props} 
+    />
+  );
+};
+
+const LazyTextarea = ({ value, onChange, ...props }) => {
+  const [localValue, setLocalValue] = useState(value || "");
+
+  useEffect(() => {
+    setLocalValue(value || "");
+  }, [value]);
+
+  const handleChange = (e) => {
+    setLocalValue(e.target.value);
+  };
+
+  const handleBlur = (e) => {
+    if (onChange && localValue !== value) {
+      onChange({ target: { value: localValue } });
+    }
+  };
+
+  return (
+    <textarea 
+      value={localValue} 
+      onChange={handleChange} 
+      onBlur={handleBlur} 
+      {...props} 
+    />
+  );
+};
+
+// Standard Input Wrapper (entscheidet ob Lazy oder Normal)
 const Input = ({
   label,
   value,
@@ -303,18 +362,35 @@ const Input = ({
         {label}
       </label>
     )}
-    <input
-      name={name}
-      type={type}
-      value={value}
-      onChange={onChange}
-      placeholder={placeholder}
-      className={`w-full p-3 bg-slate-50 border rounded-xl focus:ring-2 focus:outline-none transition-all text-slate-700 ${
-        error
-          ? "border-red-300 focus:ring-red-200 bg-red-50"
-          : "border-slate-200 focus:ring-indigo-500"
-      }`}
-    />
+    {/* Nutze LazyInput für Performance im Editor, normales input für Login */}
+    {type === 'text' && typeof onChange === 'function' ? (
+        <LazyInput
+          name={name}
+          type={type}
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          className={`w-full p-3 bg-slate-50 border rounded-xl focus:ring-2 focus:outline-none transition-all text-slate-700 ${
+            error
+              ? "border-red-300 focus:ring-red-200 bg-red-50"
+              : "border-slate-200 focus:ring-indigo-500"
+          }`}
+        />
+    ) : (
+        <input
+          name={name}
+          type={type}
+          // Wenn value existiert, nutzen wir es. Sonst lassen wir es weg (für Login)
+          {...(value !== undefined ? { value } : {})}
+          onChange={onChange}
+          placeholder={placeholder}
+          className={`w-full p-3 bg-slate-50 border rounded-xl focus:ring-2 focus:outline-none transition-all text-slate-700 ${
+            error
+              ? "border-red-300 focus:ring-red-200 bg-red-50"
+              : "border-slate-200 focus:ring-indigo-500"
+          }`}
+        />
+    )}
   </div>
 );
 
@@ -381,46 +457,12 @@ const DraggableImage = ({
 
 // --- EDITOR COMPONENTS ---
 
-const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
-  const addBlock = (type) =>
-    onChange([
-      ...blocks,
-      {
-        id: Date.now(),
-        type,
-        content: "",
-        content2: "",
-        sideText: "",
-        animation: "none",
-        align: "left",
-        layout: "center",
-        imgStyle: "rounded",
-        focus: "50% 50%",
-        focus2: "50% 50%",
-        font: "font-sans", 
-        italic: false,
-        bold: false
-      },
-    ]);
-  const updateBlock = (id, upd) =>
-    onChange(blocks.map((b) => (b.id === id ? { ...b, ...upd } : b)));
-  const removeBlock = (id) => onChange(blocks.filter((b) => b.id !== id));
-
-  const moveBlock = (idx, dir) => {
-    const arr = [...blocks];
-    if (dir === "up" && idx > 0)
-      [arr[idx], arr[idx - 1]] = [arr[idx - 1], arr[idx]];
-    if (dir === "down" && idx < arr.length - 1)
-      [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
-    onChange(arr);
-  };
-
-  const ImageSelector = ({ current, onSelect }) => (
+// Memoized Image Selector to prevent heavy re-renders
+const ImageSelector = React.memo(({ current, onSelect, uploadedImages }) => (
     <div className="flex gap-2 mb-2 overflow-x-auto pb-2 scrollbar-thin">
       {uploadedImages.map((img, i) => (
         <div
           key={i}
-          // Handle object or string based image list
           onClick={() => onSelect(typeof img === 'object' ? img.url : img)}
           className={`w-10 h-10 flex-shrink-0 rounded-md overflow-hidden cursor-pointer border-2 transition-all ${
             current === (typeof img === 'object' ? img.url : img)
@@ -428,37 +470,36 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
               : "border-transparent"
           }`}
         >
-          <img src={typeof img === 'object' ? img.url : img} className="w-full h-full object-cover" />
+          <img src={typeof img === 'object' ? img.url : img} className="w-full h-full object-cover" loading="lazy" />
         </div>
       ))}
       {uploadedImages.length === 0 && (
         <span className="text-xs text-slate-400">Keine Fotos verfügbar.</span>
       )}
     </div>
-  );
+));
 
-  return (
-    <div className="space-y-4">
-      {blocks.map((block, i) => (
+// Optimized BlockItem with custom comparison to prevent re-renders when other blocks change
+const BlockItem = React.memo(({ block, index, total, updateBlock, removeBlock, moveBlock, uploadedImages }) => {
+    return (
         <div
-          key={block.id}
           className="group relative bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-indigo-300 transition-all"
         >
-          {/* Controls: Jetzt mit Padding-Right Schutz, damit nichts verdeckt wird */}
+          {/* Controls */}
           <div className="absolute right-2 top-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 backdrop-blur p-1 rounded-lg border border-slate-100 shadow-sm z-20">
             <Button
               variant="icon"
               className="!p-1 h-6 w-6"
-              onClick={() => moveBlock(i, "up")}
-              disabled={i === 0}
+              onClick={() => moveBlock(index, "up")}
+              disabled={index === 0}
             >
               <ChevronUp size={14} />
             </Button>
             <Button
               variant="icon"
               className="!p-1 h-6 w-6"
-              onClick={() => moveBlock(i, "down")}
-              disabled={i === blocks.length - 1}
+              onClick={() => moveBlock(index, "down")}
+              disabled={index === total - 1}
             >
               <ChevronDown size={14} />
             </Button>
@@ -472,7 +513,6 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
             </Button>
           </div>
 
-          {/* FIX: pr-24 added so buttons don't slide under delete controls */}
           <div className="flex flex-wrap items-center gap-2 mb-3 border-b border-slate-50 pb-2 pr-24 relative">
             <div className="relative">
               <select
@@ -493,7 +533,6 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
               />
             </div>
              
-            {/* SCHRIFT-EINSTELLUNGEN */}
             {(["header", "text", "quote", "note"].includes(block.type) || (block.type === 'image' && (block.layout === 'left' || block.layout === 'right'))) && (
                 <>
                     <div className="flex bg-slate-50 rounded border p-0.5 ml-2">
@@ -524,7 +563,6 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                 </>
             )}
 
-             {/* Align Buttons nur für reine Textblöcke */}
              {["header", "text", "quote"].includes(block.type) && (
                 <>
                     <div className="w-px h-4 bg-slate-200 mx-1"></div>
@@ -585,8 +623,8 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
           </div>
 
           {block.type === "header" && (
-            <input
-              value={block.content}
+            <LazyInput
+              value={block.content || ""}
               onChange={(e) =>
                 updateBlock(block.id, { content: e.target.value })
               }
@@ -595,8 +633,8 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
             />
           )}
           {block.type === "text" && (
-            <textarea
-              value={block.content}
+            <LazyTextarea
+              value={block.content || ""}
               onChange={(e) =>
                 updateBlock(block.id, { content: e.target.value })
               }
@@ -606,8 +644,8 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
           )}
           {block.type === "quote" && (
             <div className="bg-slate-50 p-4 rounded border-l-4 border-indigo-200">
-              <textarea
-                value={block.content}
+              <LazyTextarea
+                value={block.content || ""}
                 onChange={(e) =>
                   updateBlock(block.id, { content: e.target.value })
                 }
@@ -623,8 +661,8 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
           )}
           {block.type === "note" && (
             <div className="bg-amber-50 p-3 rounded border border-amber-100">
-              <textarea
-                value={block.content}
+              <LazyTextarea
+                value={block.content || ""}
                 onChange={(e) =>
                   updateBlock(block.id, { content: e.target.value })
                 }
@@ -642,6 +680,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
               <ImageSelector
                 current={block.content}
                 onSelect={(img) => updateBlock(block.id, { content: img })}
+                uploadedImages={uploadedImages}
               />
               {block.content && (
                 <div className="flex flex-col gap-2 mt-2 bg-slate-50 p-2 rounded">
@@ -654,11 +693,10 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                     className="h-48 w-full rounded border border-slate-200"
                   />
                   
-                  {/* SIDE TEXT INPUT */}
                   {(block.layout === 'left' || block.layout === 'right') && (
                       <div className="mt-2 border-t pt-2 border-slate-100">
                           <label className="text-[10px] text-slate-400 font-bold uppercase mb-1 block">Text daneben (mittig)</label>
-                          <textarea
+                          <LazyTextarea
                              value={block.sideText || ''}
                              onChange={(e) => updateBlock(block.id, { sideText: e.target.value })}
                              placeholder="Schreib etwas zum Bild..."
@@ -667,7 +705,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                       </div>
                   )}
 
-                  <input
+                  <LazyInput
                     value={block.caption || ""}
                     onChange={(e) =>
                       updateBlock(block.id, { caption: e.target.value })
@@ -689,6 +727,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                 <ImageSelector
                   current={block.content}
                   onSelect={(img) => updateBlock(block.id, { content: img })}
+                  uploadedImages={uploadedImages}
                 />
                 {block.content ? (
                   <div className="mt-2">
@@ -714,6 +753,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                 <ImageSelector
                   current={block.content2}
                   onSelect={(img) => updateBlock(block.id, { content2: img })}
+                  uploadedImages={uploadedImages}
                 />
                 {block.content2 ? (
                   <div className="mt-2">
@@ -735,6 +775,63 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
             </div>
           )}
         </div>
+    );
+}, (prev, next) => {
+    return (
+        prev.block === next.block && 
+        prev.index === next.index &&
+        prev.total === next.total &&
+        prev.uploadedImages === next.uploadedImages
+    );
+});
+
+const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
+  const addBlock = (type) =>
+    onChange([
+      ...blocks,
+      {
+        id: Date.now(),
+        type,
+        content: "",
+        content2: "",
+        sideText: "",
+        animation: "none",
+        align: "left",
+        layout: "center",
+        imgStyle: "rounded",
+        focus: "50% 50%",
+        focus2: "50% 50%",
+        font: "font-sans", 
+        italic: false,
+        bold: false
+      },
+    ]);
+  const updateBlock = (id, upd) =>
+    onChange(blocks.map((b) => (b.id === id ? { ...b, ...upd } : b)));
+  const removeBlock = (id) => onChange(blocks.filter((b) => b.id !== id));
+
+  const moveBlock = (idx, dir) => {
+    const arr = [...blocks];
+    if (dir === "up" && idx > 0)
+      [arr[idx], arr[idx - 1]] = [arr[idx - 1], arr[idx]];
+    if (dir === "down" && idx < arr.length - 1)
+      [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
+    onChange(arr);
+  };
+
+  return (
+    <div className="space-y-4">
+      {blocks.map((block, i) => (
+        <BlockItem 
+            key={block.id}
+            block={block}
+            index={i}
+            total={blocks.length}
+            updateBlock={updateBlock}
+            removeBlock={removeBlock}
+            moveBlock={moveBlock}
+            uploadedImages={uploadedImages}
+        />
       ))}
 
       <div className="flex flex-wrap justify-center gap-2 pt-4 border-t border-dashed">
@@ -1676,13 +1773,24 @@ export default function App() {
       }
   };
 
+  // REF TO ACCESS LATEST STATE IN ASYNC FUNCTIONS
+  const formDataRef = useRef(formData);
+  useEffect(() => { formDataRef.current = formData; }, [formData]);
+
   const handleSave = async () => {
-    if (!formData.title) return alert("Titel fehlt!");
+    // WAIT FOR ONBLUR EVENTS TO PROPAGATE
+    // This fixes the race condition where the last typed character isn't saved yet
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // READ FROM REF TO GET LATEST STATE
+    const currentData = formDataRef.current;
+
+    if (!currentData.title) return alert("Titel fehlt!");
     setIsSaving(true);
     try {
       // Logic for Cover Image (Source)
-      const firstImage = formData.images.length > 0 ? (formData.images[0].url || formData.images[0]) : null;
-      const sourceImage = formData.coverImage || firstImage;
+      const firstImage = currentData.images.length > 0 ? (currentData.images[0].url || currentData.images[0]) : null;
+      const sourceImage = currentData.coverImage || firstImage;
       
       let previewImage = "";
       if (sourceImage && sourceImage.startsWith("data:")) {
@@ -1694,7 +1802,7 @@ export default function App() {
 
       const imageIds = [];
       // Improved loop to reuse existing IDs and only upload new images
-      for (const imgObj of formData.images) {
+      for (const imgObj of currentData.images) {
         // Check if we have an existing ID (from editing) or it's a new upload (object with null id) or legacy string
         const isObj = typeof imgObj === 'object';
         const existingId = isObj ? imgObj.id : null; // If string, no ID
@@ -1724,18 +1832,18 @@ export default function App() {
         }
       }
 
-      const savedBlocks = dehydrateBlocks(formData.blocks, formData.images);
+      const savedBlocks = dehydrateBlocks(currentData.blocks, currentData.images);
       
       const payload = {
-        title: formData.title,
-        location: formData.location,
-        date: new Date(formData.date),
-        endDate: formData.endDate ? new Date(formData.endDate) : null,
+        title: currentData.title,
+        location: currentData.location,
+        date: new Date(currentData.date),
+        endDate: currentData.endDate ? new Date(currentData.endDate) : null,
         author: user.displayName,
-        theme: formData.theme,
-        accentColor: formData.accentColor,
-        bgStyle: formData.bgStyle,
-        heroStyle: formData.heroStyle,
+        theme: currentData.theme,
+        accentColor: currentData.accentColor,
+        bgStyle: currentData.bgStyle,
+        heroStyle: currentData.heroStyle,
         images: imageIds,
         previewImage: previewImage,
         blocks: savedBlocks,
@@ -2021,7 +2129,7 @@ export default function App() {
           <div className="text-center py-20 border-2 border-dashed border-slate-200 rounded-3xl mt-8">
             <p className="text-slate-400 mb-4">Noch gähnende Leere hier.</p>
             <Button variant="secondary" onClick={startCreate}>
-              Ersten Eintrag machen
+              Trau dich Buzi 
             </Button>
           </div>
         )}
