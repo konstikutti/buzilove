@@ -61,7 +61,8 @@ import {
   XCircle,
   Italic,
   Bold, 
-  AArrowUp
+  AArrowUp,
+  CalendarDays
 } from "lucide-react";
 
 // --- Firebase Konfiguration ---
@@ -203,7 +204,8 @@ const fetchAssets = async (assetIds) => {
   });
 
   const results = await Promise.all(promises);
-  return results.filter(Boolean);
+  // Removed filter(Boolean) to keep index alignment
+  return results; 
 };
 
 const hydrateBlocks = (blocks, images) => {
@@ -213,7 +215,10 @@ const hydrateBlocks = (blocks, images) => {
     const resolveContent = (content) => {
       if (typeof content === "string" && content.startsWith("IMG_REF_")) {
         const index = parseInt(content.replace("IMG_REF_", ""), 10);
-        return images[index] || "";
+        const item = images[index];
+        if (!item) return "";
+        // Handle both simple strings (legacy/view) and objects (edit mode)
+        return typeof item === 'object' ? item.url : item;
       }
       return content;
     };
@@ -229,7 +234,12 @@ const dehydrateBlocks = (blocks, images) => {
   return blocks.map((block) => {
     const newBlock = { ...block };
     const makeRef = (content) => {
-      const index = images.indexOf(content);
+      // Handle images array of objects or strings
+      const index = images.findIndex(img => {
+          const url = typeof img === 'object' ? img.url : img;
+          return url === content;
+      });
+      
       if (index !== -1) return `IMG_REF_${index}`;
       return content;
     };
@@ -410,14 +420,15 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
       {uploadedImages.map((img, i) => (
         <div
           key={i}
-          onClick={() => onSelect(img)}
+          // Handle object or string based image list
+          onClick={() => onSelect(typeof img === 'object' ? img.url : img)}
           className={`w-10 h-10 flex-shrink-0 rounded-md overflow-hidden cursor-pointer border-2 transition-all ${
-            current === img
+            current === (typeof img === 'object' ? img.url : img)
               ? "border-indigo-500 ring-2 ring-indigo-200"
               : "border-transparent"
           }`}
         >
-          <img src={img} className="w-full h-full object-cover" />
+          <img src={typeof img === 'object' ? img.url : img} className="w-full h-full object-cover" />
         </div>
       ))}
       {uploadedImages.length === 0 && (
@@ -481,7 +492,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
                 className="absolute left-2 top-1.5 text-slate-400"
               />
             </div>
-            
+             
             {/* SCHRIFT-EINSTELLUNGEN */}
             {(["header", "text", "quote", "note"].includes(block.type) || (block.type === 'image' && (block.layout === 'left' || block.layout === 'right'))) && (
                 <>
@@ -794,7 +805,8 @@ const ImageManager = ({ images, onChange, coverImage, onSetCover }) => {
     const newImgs = [];
     for (const f of files) {
       const data = await compressImage(f, 1600, 0.8);
-      newImgs.push(data);
+      // New images have no ID yet
+      newImgs.push({ id: null, url: data });
     }
     onChange([...images, ...newImgs]);
     setLoading(false);
@@ -829,18 +841,18 @@ const ImageManager = ({ images, onChange, coverImage, onSetCover }) => {
           <div
             key={i}
             className={`relative group aspect-square rounded-lg overflow-hidden border-2 transition-all ${
-              img === coverImage
+              (typeof img === 'object' ? img.url : img) === coverImage
                 ? "border-amber-400 ring-2 ring-amber-100"
                 : "border-transparent bg-slate-100"
             }`}
           >
-            <img src={img} className="w-full h-full object-cover" />
+            <img src={typeof img === 'object' ? img.url : img} className="w-full h-full object-cover" />
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors">
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   onChange(images.filter((_, idx) => idx !== i));
-                  if (coverImage === img) onSetCover(null);
+                  if (coverImage === (typeof img === 'object' ? img.url : img)) onSetCover(null);
                 }}
                 className="absolute top-1 right-1 bg-white p-1 rounded-full shadow opacity-0 group-hover:opacity-100 hover:text-red-500"
                 title="Löschen"
@@ -849,9 +861,9 @@ const ImageManager = ({ images, onChange, coverImage, onSetCover }) => {
               </button>
 
               <button
-                onClick={() => onSetCover(img)}
+                onClick={() => onSetCover(typeof img === 'object' ? img.url : img)}
                 className={`absolute bottom-1 right-1 p-1.5 rounded-full shadow transition-all ${
-                  img === coverImage
+                  (typeof img === 'object' ? img.url : img) === coverImage
                     ? "bg-amber-400 text-white opacity-100"
                     : "bg-white text-slate-400 opacity-0 group-hover:opacity-100 hover:text-amber-400"
                 }`}
@@ -859,7 +871,7 @@ const ImageManager = ({ images, onChange, coverImage, onSetCover }) => {
               >
                 <Star
                   size={12}
-                  fill={img === coverImage ? "currentColor" : "none"}
+                  fill={(typeof img === 'object' ? img.url : img) === coverImage ? "currentColor" : "none"}
                 />
               </button>
             </div>
@@ -972,7 +984,7 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
               );
               // Check if we use the new Flex layout (Left/Right)
               const isSideLayout = b.layout === 'left' || b.layout === 'right';
-              
+               
               return (
                 <div className={isSideLayout ? classes : `my-6 relative ${classes}`}>
                     {/* BILD CONTAINER */}
@@ -995,7 +1007,7 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
                     {/* SIDE TEXT CONTAINER (nur bei Side Layout und wenn Text existiert) */}
                     {isSideLayout && (
                         <div className="w-full md:w-1/2 flex items-center justify-center p-4">
-                             <div className={`text-lg leading-relaxed whitespace-pre-wrap ${b.font || 'font-sans'} ${b.italic ? 'italic' : ''} ${b.bold ? 'font-bold' : ''} ${theme === 'cinema' ? 'text-slate-300' : 'text-slate-700'}`}>
+                              <div className={`text-lg leading-relaxed whitespace-pre-wrap ${b.font || 'font-sans'} ${b.italic ? 'italic' : ''} ${b.bold ? 'font-bold' : ''} ${theme === 'cinema' ? 'text-slate-300' : 'text-slate-700'}`}>
                                 {b.sideText}
                             </div>
                         </div>
@@ -1088,7 +1100,7 @@ const ThemeSelector = ({ selected, onSelect }) => {
 };
 
 const MemoryCard = ({ memory, onClick }) => {
-  const { title, author, date, theme, location, blocks } = memory;
+  const { title, author, date, endDate, theme, location, blocks } = memory;
   const images = memory.images || [];
   // Use cover image if available, else first image
   const previewImage = memory.coverImage || memory.previewImage || (images.length > 0 ? images[0] : "");
@@ -1107,8 +1119,13 @@ const MemoryCard = ({ memory, onClick }) => {
   };
   const previewText = getPreviewText();
 
-  const formatDate = (timestamp) => {
-    return formatDateSafe(timestamp);
+  const renderDate = () => {
+      const start = formatDateSafe(date);
+      if (endDate) {
+          const end = formatDateSafe(endDate);
+          return `${start} – ${end}`;
+      }
+      return start;
   };
 
   const Container = ({ children, className }) => (
@@ -1140,7 +1157,7 @@ const MemoryCard = ({ memory, onClick }) => {
             </h3>
             <div className="flex justify-between items-center text-slate-400 font-handwriting text-sm mt-4">
               <span>{location}</span>
-              <span>{formatDate(date)}</span>
+              <span>{renderDate()}</span>
             </div>
           </div>
         </div>
@@ -1168,7 +1185,7 @@ const MemoryCard = ({ memory, onClick }) => {
           <h3 className="text-2xl font-serif italic text-white mb-2 leading-none">
             {title}
           </h3>
-          <div className="text-white/60 text-xs">{formatDate(date)}</div>
+          <div className="text-white/60 text-xs">{renderDate()}</div>
         </div>
       </Container>
     );
@@ -1180,7 +1197,7 @@ const MemoryCard = ({ memory, onClick }) => {
       <Container className="bg-[#fdfbf7] p-6 rounded-sm shadow-sm border border-slate-200 hover:shadow-md group">
         <div className="border-b-2 border-slate-800 pb-2 mb-4">
           <div className="text-[10px] font-serif italic text-slate-500 text-center">
-            {formatDate(date)}
+            {renderDate()}
           </div>
           <h3 className="text-xl font-serif font-bold text-slate-900 text-center leading-tight mt-1">
             {title}
@@ -1217,7 +1234,7 @@ const MemoryCard = ({ memory, onClick }) => {
           </div>
         )}
         <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold shadow-sm">
-          {formatDate(date)}
+          {renderDate()}
         </div>
       </div>
       <div className="p-6 flex-1 flex flex-col">
@@ -1255,7 +1272,8 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
     const load = async () => {
       if (memory.images && memory.images.length > 0) {
         const assets = await fetchAssets(memory.images);
-        setHydratedImages(assets);
+        // Filter nulls here for display
+        setHydratedImages(assets.filter(Boolean));
       } else if (memory.imageUrl) {
         setHydratedImages([memory.imageUrl]);
       }
@@ -1282,8 +1300,13 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
     return "bg-white";
   };
 
-  const formatDate = (date) => {
-    return formatDateSafe(date);
+  const renderDate = () => {
+      const start = formatDateSafe(memory.date);
+      if (memory.endDate) {
+          const end = formatDateSafe(memory.endDate);
+          return `${start} – ${end}`;
+      }
+      return start;
   };
 
   if (loadingImages)
@@ -1421,7 +1444,7 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
                 className="flex gap-2 text-xs font-bold uppercase tracking-wider mb-2"
                 style={{ color: accent.hex }}
               >
-                {memory.location} • {formatDate(memory.date)}
+                {memory.location} • {renderDate()}
               </div>
               <h1 className="text-5xl font-bold text-slate-900 mb-6">
                 {memory.title}
@@ -1509,6 +1532,7 @@ export default function App() {
     images: [],
     blocks: [],
     date: new Date().toISOString().split("T")[0],
+    endDate: "", // Neues Feld für Enddatum
     coverImage: "", 
   });
   const [isSaving, setIsSaving] = useState(false);
@@ -1587,6 +1611,7 @@ export default function App() {
       images: [],
       blocks: [{ id: 1, type: "text", content: "" }],
       date: new Date().toISOString().split("T")[0],
+      endDate: "",
       coverImage: "",
     };
     setFormData(initial);
@@ -1598,20 +1623,39 @@ export default function App() {
     setEditingId(memory.id);
     setIsSaving(true);
     let imgs = memory.images || [];
-    if (imgs.length > 0 && !imgs[0].startsWith("data:")) {
-      imgs = await fetchAssets(imgs);
+    let editableImages = [];
+
+    // Refactored hydration logic to handle object mapping (ID <-> Data)
+    if (imgs.length > 0) {
+       // Assuming memory.images contains IDs. 
+       // Fetch valid IDs.
+       const assets = await fetchAssets(imgs);
+       
+       // Map original ID to asset data
+       imgs.forEach((id, index) => {
+           // We only add it if we successfully fetched data or it's a legacy data string
+           const data = assets[index];
+           if (data) {
+              editableImages.push({ id: id, url: data });
+           } else if (id.startsWith("data:")) {
+              // Legacy support for direct data strings in image array
+              editableImages.push({ id: null, url: id });
+           }
+       });
     }
+
     const editableBlocks = memory.blocks
-      ? hydrateBlocks(memory.blocks, imgs)
+      ? hydrateBlocks(memory.blocks, editableImages)
       : [{ id: 1, type: "text", content: memory.content || "" }];
-    
+     
     const data = {
       ...memory,
-      images: imgs,
+      images: editableImages, // Now contains { id, url } objects
       blocks: editableBlocks,
       date: memory.date?.toDate
         ? memory.date.toDate().toISOString().split("T")[0]
         : memory.date,
+      endDate: memory.endDate ? (memory.endDate.toDate ? memory.endDate.toDate().toISOString().split("T")[0] : memory.endDate) : "",
       coverImage: memory.coverImage || "",
     };
 
@@ -1636,47 +1680,57 @@ export default function App() {
     if (!formData.title) return alert("Titel fehlt!");
     setIsSaving(true);
     try {
-      const sourceImage = formData.coverImage || (formData.images.length > 0 ? formData.images[0] : null);
+      // Logic for Cover Image (Source)
+      const firstImage = formData.images.length > 0 ? (formData.images[0].url || formData.images[0]) : null;
+      const sourceImage = formData.coverImage || firstImage;
+      
       let previewImage = "";
-      if (sourceImage) {
+      if (sourceImage && sourceImage.startsWith("data:")) {
         const blob = await fetch(sourceImage).then((r) => r.blob());
         previewImage = await compressImage(blob, 800, 0.7);
+      } else {
+          previewImage = sourceImage;
       }
+
       const imageIds = [];
-      for (const imgData of formData.images) {
-        if (imgData.startsWith("data:")) {
-          const assetDoc = await addDoc(
-            collection(
-              db,
-              "artifacts",
-              appId,
-              "public",
-              "data",
-              "memory_assets"
-            ),
-            { imageData: imgData, createdAt: serverTimestamp() }
-          );
-          imageIds.push(assetDoc.id);
+      // Improved loop to reuse existing IDs and only upload new images
+      for (const imgObj of formData.images) {
+        // Check if we have an existing ID (from editing) or it's a new upload (object with null id) or legacy string
+        const isObj = typeof imgObj === 'object';
+        const existingId = isObj ? imgObj.id : null; // If string, no ID
+        const dataUrl = isObj ? imgObj.url : imgObj;
+
+        if (existingId) {
+            // Already uploaded, reuse ID
+            imageIds.push(existingId);
+        } else if (dataUrl && dataUrl.startsWith("data:")) {
+            // New upload required
+             const assetDoc = await addDoc(
+                collection(
+                  db,
+                  "artifacts",
+                  appId,
+                  "public",
+                  "data",
+                  "memory_assets"
+                ),
+                { imageData: dataUrl, createdAt: serverTimestamp() }
+              );
+              imageIds.push(assetDoc.id);
         } else {
-          const assetDoc = await addDoc(
-            collection(
-              db,
-              "artifacts",
-              appId,
-              "public",
-              "data",
-              "memory_assets"
-            ),
-            { imageData: imgData, createdAt: serverTimestamp() }
-          );
-          imageIds.push(assetDoc.id);
+            // Should not happen, but safe fallback (maybe external URL)
+            // If it's not data URI and no ID, maybe we shouldn't save it or it's a raw URL?
+            // For now, ignore unless it looks like a valid ID string, but we can't tell easily.
         }
       }
+
       const savedBlocks = dehydrateBlocks(formData.blocks, formData.images);
+      
       const payload = {
         title: formData.title,
         location: formData.location,
         date: new Date(formData.date),
+        endDate: formData.endDate ? new Date(formData.endDate) : null,
         author: user.displayName,
         theme: formData.theme,
         accentColor: formData.accentColor,
@@ -1707,7 +1761,7 @@ export default function App() {
       setIsSaving(false);
     }
   };
-  
+   
   const triggerDelete = () => {
       setShowDeleteConfirm(true);
   };
@@ -1827,14 +1881,54 @@ export default function App() {
                     setFormData({ ...formData, title: e.target.value })
                   }
                 />
-                <Input
-                  label="Datum"
-                  type="date"
-                  value={formData.date}
-                  onChange={(e) =>
-                    setFormData({ ...formData, date: e.target.value })
-                  }
-                />
+                 {/* NEUES DATUMS-HANDLING MIT ZEITRAUM */}
+                 <div className="mb-4 w-full">
+                    <div className="flex items-center justify-between mb-2">
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                            {formData.endDate ? 'Zeitraum' : 'Datum'}
+                        </label>
+                        <label className="flex items-center gap-2 text-xs font-medium text-slate-400 cursor-pointer hover:text-indigo-600">
+                             <input 
+                                type="checkbox" 
+                                className="accent-indigo-600 rounded"
+                                checked={!!formData.endDate}
+                                onChange={(e) => {
+                                    setFormData({
+                                        ...formData,
+                                        endDate: e.target.checked ? formData.date : "" 
+                                    })
+                                }}
+                             />
+                             Zeitraum?
+                        </label>
+                    </div>
+                    <div className="flex gap-2">
+                         <div className="flex-1">
+                             <input
+                                type="date"
+                                value={formData.date}
+                                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all text-slate-700"
+                             />
+                         </div>
+                         {formData.endDate && (
+                             <>
+                                <div className="flex items-center text-slate-400">
+                                    <ArrowRightIcon size={16} />
+                                </div>
+                                <div className="flex-1">
+                                    <input
+                                        type="date"
+                                        value={formData.endDate}
+                                        min={formData.date}
+                                        onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all text-slate-700"
+                                    />
+                                </div>
+                             </>
+                         )}
+                    </div>
+                 </div>
               </div>
               <Input
                 label="Ort"
