@@ -11,7 +11,6 @@ import {
   signInAnonymously,
   onAuthStateChanged,
   updateProfile,
-  signInWithCustomToken,
 } from "firebase/auth";
 import {
   getFirestore,
@@ -55,9 +54,7 @@ import {
   Maximize,
   BoxSelect,
   Columns,
-  ArrowRight as ArrowRightIcon,
   Database,
-  ArrowLeft as ArrowLeftIcon,
   ZoomIn,
   X,
   Camera,
@@ -67,11 +64,18 @@ import {
   XCircle,
   Italic,
   Bold,
-  AArrowUp,
-  CalendarDays,
   AlertTriangle,
   Info,
   Save,
+  Search,
+  Map as MapIcon,
+  Grid,
+  Globe,
+  Minus as MinusIcon,
+  Plus as PlusIcon,
+  Navigation,
+  Calendar,
+  ArrowRight as ArrowRightIcon,
 } from "lucide-react";
 
 // --- Firebase Konfiguration ---
@@ -130,7 +134,67 @@ const FONT_OPTIONS = [
   { id: "font-mono", name: "Mono" },
 ];
 
-// --- Helfer: Sicheres Datum ---
+// --- Simple Static City Database for Map ---
+const CITY_COORDS = {
+  // Germany / DACH
+  Berlin: { lat: 52.52, lng: 13.405 },
+  München: { lat: 48.135, lng: 11.582 },
+  Munich: { lat: 48.135, lng: 11.582 },
+  Hamburg: { lat: 53.551, lng: 9.993 },
+  Köln: { lat: 50.937, lng: 6.96 },
+  Cologne: { lat: 50.937, lng: 6.96 },
+  Frankfurt: { lat: 50.11, lng: 8.682 },
+  Stuttgart: { lat: 48.775, lng: 9.182 },
+  Düsseldorf: { lat: 51.227, lng: 6.773 },
+  Leipzig: { lat: 51.339, lng: 12.373 },
+  Dresden: { lat: 51.05, lng: 13.737 },
+  Hannover: { lat: 52.375, lng: 9.732 },
+  Nürnberg: { lat: 49.452, lng: 11.076 },
+  Wien: { lat: 48.208, lng: 16.373 },
+  Vienna: { lat: 48.208, lng: 16.373 },
+  Zürich: { lat: 47.376, lng: 8.541 },
+  Zurich: { lat: 47.376, lng: 8.541 },
+  Bern: { lat: 46.948, lng: 7.447 },
+  Salzburg: { lat: 47.809, lng: 13.055 },
+  Innsbruck: { lat: 47.269, lng: 11.404 },
+  Basel: { lat: 47.559, lng: 7.588 },
+  // International
+  Paris: { lat: 48.856, lng: 2.352 },
+  London: { lat: 51.507, lng: -0.127 },
+  Rom: { lat: 41.902, lng: 12.496 },
+  Rome: { lat: 41.902, lng: 12.496 },
+  Barcelona: { lat: 41.385, lng: 2.173 },
+  Madrid: { lat: 40.416, lng: -3.703 },
+  Mallorca: { lat: 39.695, lng: 3.017 },
+  Palma: { lat: 39.569, lng: 2.65 },
+  Amsterdam: { lat: 52.367, lng: 4.904 },
+  Prag: { lat: 50.075, lng: 14.437 },
+  Prague: { lat: 50.075, lng: 14.437 },
+  Budapest: { lat: 47.497, lng: 19.04 },
+  NewYork: { lat: 40.712, lng: -74.006 },
+  NYC: { lat: 40.712, lng: -74.006 },
+  Dubai: { lat: 25.204, lng: 55.27 },
+  Bangkok: { lat: 13.756, lng: 100.501 },
+  Tokio: { lat: 35.676, lng: 139.65 },
+  Tokyo: { lat: 35.676, lng: 139.65 },
+  Sydney: { lat: -33.868, lng: 151.209 },
+  Kapstadt: { lat: -33.924, lng: 18.424 },
+  Gardasee: { lat: 45.604, lng: 10.635 },
+  Venedig: { lat: 45.44, lng: 12.315 },
+  Mailand: { lat: 45.464, lng: 9.19 },
+};
+
+const getCoordinates = (locationName) => {
+  if (!locationName) return null;
+  const normalized = locationName.trim();
+  const keys = Object.keys(CITY_COORDS);
+  if (CITY_COORDS[normalized]) return CITY_COORDS[normalized];
+  const found = keys.find((k) => normalized.includes(k));
+  if (found) return CITY_COORDS[found];
+  return null;
+};
+
+// --- Helper Functions ---
 const formatDateSafe = (dateInput) => {
   if (!dateInput) return "";
   try {
@@ -146,7 +210,12 @@ const formatDateSafe = (dateInput) => {
   }
 };
 
-// --- Helfer: Intelligente Bildkomprimierung ---
+const getDateObj = (d) => {
+  if (!d) return new Date(0);
+  if (d.toDate) return d.toDate();
+  return new Date(d);
+};
+
 const compressImage = (file, maxWidth = 1600, quality = 0.8) => {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -192,11 +261,9 @@ const compressImage = (file, maxWidth = 1600, quality = 0.8) => {
   });
 };
 
-// --- DATA LOGIC ---
-
 const fetchSingleImage = async (id) => {
   if (!id) return null;
-  if (typeof id !== "string") return null; // Safety check
+  if (typeof id !== "string") return null;
   if (id.startsWith("data:") || id.startsWith("http")) return id;
   try {
     const docRef = doc(
@@ -216,32 +283,6 @@ const fetchSingleImage = async (id) => {
   }
 };
 
-const fetchAssets = async (assetIds) => {
-  if (!assetIds || assetIds.length === 0) return [];
-  const promises = assetIds.map(async (id) => {
-    if (typeof id !== "string") return null;
-    if (id.startsWith("data:") || id.startsWith("http")) return id;
-    try {
-      const docRef = doc(
-        db,
-        "artifacts",
-        appId,
-        "public",
-        "data",
-        "memory_assets",
-        id
-      );
-      const snapshot = await getDoc(docRef);
-      if (snapshot.exists()) return snapshot.data().imageData;
-      return null;
-    } catch (e) {
-      console.error("Bildfehler:", id);
-      return null;
-    }
-  });
-  return Promise.all(promises);
-};
-
 const hydrateBlocks = (blocks, images) => {
   if (!blocks) return [];
   return blocks.map((block) => {
@@ -251,7 +292,6 @@ const hydrateBlocks = (blocks, images) => {
         const index = parseInt(content.replace("IMG_REF_", ""), 10);
         const item = images[index];
         if (!item) return "";
-        // Safely extract URL or string, ensuring no objects leak into JSX text
         const val = typeof item === "object" ? item?.url || "" : item;
         return typeof val === "string" ? val : "";
       }
@@ -517,6 +557,384 @@ const DraggableImage = ({
     </div>
   );
 };
+
+// --- TILE MAP COMPONENTS ---
+
+const TILE_SIZE = 256;
+
+// Memoized Marker to prevent re-render on map move unless pos changes
+const MapMarker = React.memo(({ x, y, loc, isSelected, onClick, children }) => (
+  <div
+    className="absolute transform -translate-x-1/2 -translate-y-full cursor-pointer group z-20 hover:z-30 transition-transform duration-200 ease-out"
+    style={{ left: x, top: y }}
+    onClick={onClick}
+    onMouseDown={(e) => e.stopPropagation()} // STOP PROPAGATION HERE
+  >
+    {children}
+  </div>
+));
+
+// Memoized Tile to prevent flicker
+const MapTile = React.memo(({ src, style }) => (
+  <img src={src} style={style} className="select-none grayscale-[0.2] contrast-[1.05]" alt="" />
+));
+
+const InteractiveMap = ({ memories, onNavigate }) => {
+  const [center, setCenter] = useState({ lat: 51.1657, lng: 10.4515 }); 
+  const [zoom, setZoom] = useState(5.5);
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  const [fetchedCoords, setFetchedCoords] = useState({});
+  const [selectedLoc, setSelectedLoc] = useState(null); 
+  
+  // Interaction Refs - NO State update during drag for performance
+  const containerRef = useRef(null);
+  const contentRef = useRef(null);
+  const dragRef = useRef({ 
+    active: false, 
+    startX: 0, 
+    startY: 0, 
+    startCenterPx: { x: 0, y: 0 } 
+  });
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (let entry of entries) {
+        setDimensions({
+          width: entry.contentRect.width,
+          height: entry.contentRect.height,
+        });
+      }
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  // Geocoding & Data Processing
+  const geocodeLocation = async (loc) => {
+    try {
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(loc)}&limit=1`);
+      const data = await response.json();
+      if (data && data.length > 0) {
+        return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+      }
+    } catch (e) {
+      console.warn("Geocoding failed for", loc, e);
+    }
+    return null;
+  };
+
+  const locationData = useMemo(() => {
+    const data = {};
+    const unmapped = [];
+    memories.forEach((mem) => {
+      if (!mem.location) return;
+      const normalizedName = mem.location.trim();
+      const cached = CITY_COORDS[normalizedName] || fetchedCoords[normalizedName];
+      const coords = getCoordinates(normalizedName) || cached;
+
+      if (coords) {
+        const key = `${coords.lat},${coords.lng}`;
+        if (!data[key]) {
+          data[key] = { ...coords, name: mem.location, memories: [] };
+        }
+        data[key].memories.push(mem);
+        if (data[key].memories.length === 1) data[key].name = mem.location;
+      } else {
+        const existing = unmapped.find((u) => u.name === mem.location);
+        if (existing) {
+          existing.memories.push(mem);
+        } else {
+          unmapped.push({ name: mem.location, memories: [mem] });
+        }
+      }
+    });
+    
+    Object.values(data).forEach(loc => {
+        loc.memories.sort((a,b) => getDateObj(b.date) - getDateObj(a.date));
+        loc.count = loc.memories.length;
+    });
+
+    return { mapped: Object.values(data), unmapped };
+  }, [memories, fetchedCoords]);
+
+  useEffect(() => {
+    const unmappedNames = locationData.unmapped.map(u => u.name);
+    if (unmappedNames.length === 0) return;
+    const fetchNext = async () => {
+      const target = unmappedNames.find(name => fetchedCoords[name] === undefined);
+      if (!target) return;
+      setFetchedCoords(prev => ({ ...prev, [target]: null })); 
+      const coords = await geocodeLocation(target);
+      if (coords) {
+        setFetchedCoords(prev => ({ ...prev, [target]: coords }));
+      }
+    };
+    const timer = setTimeout(fetchNext, 1000);
+    return () => clearTimeout(timer);
+  }, [locationData.unmapped, fetchedCoords]);
+
+  // Projection Math
+  const project = useCallback((lat, lng, z) => {
+    const scale = 256 * Math.pow(2, z);
+    let siny = Math.sin((lat * Math.PI) / 180);
+    siny = Math.min(Math.max(siny, -0.9999), 0.9999);
+    return {
+      x: scale * (0.5 + lng / 360),
+      y: scale * (0.5 - Math.log((1 + siny) / (1 - siny)) / (4 * Math.PI))
+    };
+  }, []);
+
+  const unproject = useCallback((x, y, z) => {
+    const scale = 256 * Math.pow(2, z);
+    const lng = (x / scale - 0.5) * 360;
+    const n = Math.PI - 2 * Math.PI * (y / scale);
+    const lat = (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+    return { lat, lng };
+  }, []);
+
+  // Map Vars
+  const tileZoom = Math.floor(zoom);
+  const scale = Math.pow(2, zoom - tileZoom); 
+  const centerPx = project(center.lat, center.lng, zoom);
+  const worldWidth = 256 * Math.pow(2, zoom);
+
+  // --- Interaction Logic with Window Listeners ---
+
+  const handleWindowMouseMove = useCallback((e) => {
+    if (!dragRef.current.active || !contentRef.current) return;
+    const dx = e.clientX - dragRef.current.startX;
+    const dy = e.clientY - dragRef.current.startY;
+    // Just move visually using CSS transform (GPU accelerated)
+    contentRef.current.style.transform = `translate(${dx}px, ${dy}px)`;
+  }, []);
+
+  const handleWindowMouseUp = useCallback((e) => {
+    if (!dragRef.current.active) return;
+    
+    const dx = e.clientX - dragRef.current.startX;
+    const dy = e.clientY - dragRef.current.startY;
+    
+    // Commit new center if moved
+    if (Math.abs(dx) > 0 || Math.abs(dy) > 0) {
+       const startPx = dragRef.current.startCenterPx;
+       const newCx = startPx.x - dx;
+       const newCy = startPx.y - dy;
+       
+       let newCenter = unproject(newCx, newCy, zoom);
+
+       // Hard clamp latitude to avoid gray areas
+       if (newCenter.lat > 85) newCenter.lat = 85;
+       if (newCenter.lat < -85) newCenter.lat = -85;
+       
+       setCenter(newCenter);
+    }
+    
+    dragRef.current.active = false;
+    
+    // Reset visual transform (React will re-render with new center)
+    if (contentRef.current) {
+        contentRef.current.style.transform = '';
+        contentRef.current.style.transition = ''; 
+    }
+    
+    // Clean up
+    window.removeEventListener('mousemove', handleWindowMouseMove);
+    window.removeEventListener('mouseup', handleWindowMouseUp);
+  }, [zoom, unproject, handleWindowMouseMove]);
+
+  const handleMouseDown = (e) => {
+    // Start Drag
+    dragRef.current = {
+      active: true,
+      startX: e.clientX,
+      startY: e.clientY,
+      startCenterPx: { ...centerPx } // Capture projected pixel center
+    };
+    
+    if (contentRef.current) contentRef.current.style.transition = 'none';
+    
+    // Attach window listeners to ensure we catch mouseup outside container
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+  };
+  
+  const handleWheel = (e) => {
+    e.preventDefault();
+    const delta = -e.deltaY;
+    setZoom(z => Math.min(Math.max(z + delta * 0.002, 2), 19));
+  };
+
+
+  // --- Rendering ---
+  
+  const tiles = useMemo(() => {
+    if (dimensions.width === 0) return [];
+    
+    const t = [];
+    const centerPxInt = project(center.lat, center.lng, tileZoom);
+    
+    const viewLeftInt = centerPxInt.x - (dimensions.width / 2) / scale;
+    const viewTopInt = centerPxInt.y - (dimensions.height / 2) / scale;
+    const viewRightInt = centerPxInt.x + (dimensions.width / 2) / scale;
+    const viewBottomInt = centerPxInt.y + (dimensions.height / 2) / scale;
+
+    const minX = Math.floor(viewLeftInt / TILE_SIZE) - 1; // Buffer
+    const maxX = Math.floor(viewRightInt / TILE_SIZE) + 1;
+    const minY = Math.floor(viewTopInt / TILE_SIZE) - 1;
+    const maxY = Math.floor(viewBottomInt / TILE_SIZE) + 1;
+    const maxTiles = Math.pow(2, tileZoom);
+
+    for (let x = minX; x <= maxX; x++) {
+      for (let y = minY; y <= maxY; y++) {
+        if (y < 0 || y >= maxTiles) continue;
+
+        const tileX = ((x % maxTiles) + maxTiles) % maxTiles;
+        const left = (x * TILE_SIZE - viewLeftInt) * scale;
+        const top = (y * TILE_SIZE - viewTopInt) * scale;
+        
+        t.push({
+          key: `${tileZoom}-${x}-${y}`,
+          src: `https://tile.openstreetmap.org/${tileZoom}/${tileX}/${y}.png`,
+          style: {
+            position: 'absolute',
+            left: left,
+            top: top,
+            width: Math.ceil(TILE_SIZE * scale),
+            height: Math.ceil(TILE_SIZE * scale),
+          }
+        });
+      }
+    }
+    return t;
+  }, [center, zoom, dimensions, tileZoom, scale, project]);
+
+  const markers = locationData.mapped.map((loc, i) => {
+    const markerPx = project(loc.lat, loc.lng, zoom);
+    let deltaX = markerPx.x - centerPx.x;
+    
+    while (deltaX > worldWidth / 2) deltaX -= worldWidth;
+    while (deltaX < -worldWidth / 2) deltaX += worldWidth;
+
+    const x = (dimensions.width / 2) + deltaX;
+    const y = markerPx.y - (centerPx.y - dimensions.height / 2);
+
+    // Increase buffer area significantly to prevent pins flickering when near edges
+    // Pins might stick out of the visible map area
+    if (x < -200 || x > dimensions.width + 200 || y < -200 || y > dimensions.height + 200) return null;
+
+    const latestMemory = loc.memories[0];
+    const thumbUrl = latestMemory.previewImage || (latestMemory.images && latestMemory.images.length > 0 ? latestMemory.images[0] : null);
+    const count = loc.count;
+
+    return (
+        <MapMarker 
+            key={`${i}-${loc.name}`}
+            x={x} 
+            y={y} 
+            loc={loc} 
+            isSelected={selectedLoc === loc}
+            onClick={(e) => { e.stopPropagation(); setSelectedLoc(loc); }}
+        >
+            <div className="relative flex flex-col items-center">
+                <div className={`relative transition-all duration-300 ${selectedLoc === loc ? 'scale-125 z-50' : 'hover:scale-110 z-20'}`}>
+                    {count > 1 && (
+                        <div className="absolute top-[-4px] left-1/2 -translate-x-1/2 w-10 h-10 bg-white rounded-full shadow-md border-2 border-white opacity-60 z-0"></div>
+                    )}
+                    <div className={`relative z-10 w-12 h-12 rounded-full border-4 shadow-lg overflow-hidden bg-white ${selectedLoc === loc ? 'border-indigo-600 ring-2 ring-indigo-200' : 'border-white'}`}>
+                        {thumbUrl ? (
+                            <img src={thumbUrl} className="w-full h-full object-cover" alt={loc.name} />
+                        ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-indigo-50 text-indigo-500">
+                                <MapPin size={20} fill="currentColor"/>
+                            </div>
+                        )}
+                    </div>
+                    {count > 1 && (
+                        <div className="absolute -top-2 -right-2 bg-indigo-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-white shadow-sm z-20">
+                            {count}
+                        </div>
+                    )}
+                    <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-white absolute left-1/2 -translate-x-1/2 -bottom-2 drop-shadow-sm"></div>
+                </div>
+            </div>
+        </MapMarker>
+    );
+  });
+
+  return (
+    <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden bg-slate-100 relative">
+      <div 
+        ref={containerRef}
+        className="flex-1 relative overflow-hidden cursor-move bg-[#cad2d3]"
+        onWheel={handleWheel}
+        onMouseDown={handleMouseDown}
+        // MouseMove/Up handled by window listeners now
+        onClick={() => setSelectedLoc(null)} 
+      >
+        <div ref={contentRef} className="absolute inset-0 w-full h-full">
+            {/* Tiles */}
+            {tiles.map(t => <MapTile key={t.key} {...t} />)}
+            {/* Markers */}
+            {markers}
+        </div>
+
+        <div className="absolute bottom-1 right-1 bg-white/70 px-1 text-[10px] text-slate-600 pointer-events-none z-10 rounded">
+          © OpenStreetMap contributors
+        </div>
+
+        <div className="absolute right-6 bottom-8 flex flex-col gap-2 z-50">
+           <button onClick={(e) => { e.stopPropagation(); setZoom(z => Math.min(z + 1, 19)); }} className="bg-white p-2 rounded-xl shadow-lg hover:bg-slate-50 text-slate-700"><PlusIcon size={20}/></button>
+           <button onClick={(e) => { e.stopPropagation(); setZoom(z => Math.max(z - 1, 2)); }} className="bg-white p-2 rounded-xl shadow-lg hover:bg-slate-50 text-slate-700"><MinusIcon size={20}/></button>
+           <button onClick={(e) => { e.stopPropagation(); setZoom(5.5); setCenter({ lat: 51.1657, lng: 10.4515 }); }} className="bg-white p-2 rounded-xl shadow-lg hover:bg-slate-50 text-slate-700"><Navigation size={20}/></button>
+        </div>
+
+        {selectedLoc && (
+            <div 
+                className="absolute bottom-8 left-1/2 -translate-x-1/2 w-[90%] max-w-sm bg-white rounded-2xl shadow-2xl z-50 overflow-hidden animate-in slide-in-from-bottom-4 fade-in"
+                onClick={(e) => e.stopPropagation()} 
+            >
+                <div className="bg-indigo-600 p-3 flex justify-between items-center text-white">
+                    <div className="flex items-center gap-2 font-bold text-sm">
+                        <MapPin size={16} /> {selectedLoc.name}
+                    </div>
+                    <button onClick={() => setSelectedLoc(null)} className="hover:bg-indigo-700 rounded-full p-1"><X size={16}/></button>
+                </div>
+                <div className="max-h-60 overflow-y-auto p-2 scrollbar-thin">
+                    {selectedLoc.memories.map((mem) => {
+                        const thumb = mem.previewImage || (mem.images?.[0]);
+                        return (
+                            <div 
+                                key={mem.id} 
+                                onClick={() => onNavigate(mem)}
+                                className="flex gap-3 items-center p-2 hover:bg-slate-50 rounded-xl cursor-pointer transition-colors border-b last:border-0 border-slate-100"
+                            >
+                                <div className="w-12 h-12 rounded-lg bg-slate-200 overflow-hidden flex-shrink-0 border border-slate-100">
+                                    {thumb ? (
+                                        <img src={thumb} className="w-full h-full object-cover" />
+                                    ) : (
+                                        <div className="flex items-center justify-center h-full text-slate-400"><ImageIcon size={16}/></div>
+                                    )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <h4 className="font-bold text-slate-800 text-sm truncate">{mem.title}</h4>
+                                    <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
+                                        <Calendar size={10} />
+                                        <span>{formatDateSafe(mem.date)}</span>
+                                    </div>
+                                </div>
+                                <ChevronRight size={16} className="text-slate-300" />
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 
 // --- EDITOR SUB-COMPONENTS ---
 
@@ -1894,6 +2312,10 @@ export default function App() {
   const [editingId, setEditingId] = useState(null);
   const [originalData, setOriginalData] = useState(null);
   const [toasts, setToasts] = useState([]);
+  
+  // New States
+  const [searchTerm, setSearchTerm] = useState("");
+  const [viewMode, setViewMode] = useState("grid"); // 'grid' | 'map'
 
   const [formData, setFormData] = useState({
     title: "",
@@ -1950,9 +2372,16 @@ export default function App() {
     );
     return onSnapshot(q, (snap) => {
       const data = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() }))
-        .sort((a, b) => new Date(b.date) - new Date(a.date));
-      setMemories(data);
+        .map((d) => ({ id: d.id, ...d.data() }));
+      
+      // Strict sorting: Newest first (Left to right flow in standard grid)
+      const sorted = data.sort((a, b) => {
+        const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date || 0);
+        const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date || 0);
+        return dateB - dateA;
+      });
+      
+      setMemories(sorted);
     });
   }, [user]);
 
@@ -2265,6 +2694,17 @@ export default function App() {
       setIsDeleting(false);
     }
   };
+  
+  // Filtering logic
+  const filteredMemories = useMemo(() => {
+    if (!searchTerm) return memories;
+    const lower = searchTerm.toLowerCase();
+    return memories.filter(m => 
+       m.title?.toLowerCase().includes(lower) || 
+       m.location?.toLowerCase().includes(lower) ||
+       m.author?.toLowerCase().includes(lower)
+    );
+  }, [memories, searchTerm]);
 
   if (loading)
     return (
@@ -2590,46 +3030,105 @@ export default function App() {
         <div>
           <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur border-b px-6 h-20 flex items-center justify-between">
             <div
-              onClick={() => setView("home")}
+              onClick={() => { setView("home"); setViewMode('grid'); setSearchTerm(""); }}
               className="flex items-center gap-2 cursor-pointer"
             >
               <Sparkles className="text-indigo-600" />
-              <span className="font-serif text-xl font-bold text-slate-800">
+              <span className="font-serif text-xl font-bold text-slate-800 hidden md:block">
                 BUZI Tagebuch
               </span>
             </div>
-            <Button onClick={startCreate}>
-              <Plus size={18} /> Neu
-            </Button>
-          </nav>
-          <main className="max-w-6xl mx-auto p-6 pt-12">
-            <header className="mb-16 text-center max-w-2xl mx-auto">
-              <h2 className="text-5xl font-serif text-slate-900 mb-6">
-                Unsere Stories
-              </h2>
-              <p className="text-lg text-slate-500 leading-relaxed">
-                Das geheime Archiv für unsere Insider, Abenteuer und alles, was
-                wir nicht vergessen wollen.
-              </p>
-            </header>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {memories.map((mem) => (
-                <MemoryCard
-                  key={mem.id}
-                  memory={mem}
-                  onClick={() => openDetail(mem)}
+            
+            <div className="flex items-center gap-4">
+              {/* Search Bar */}
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Search size={16} className="text-slate-400"/>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Suchen..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 pr-4 py-2 bg-slate-100 border-transparent focus:bg-white focus:border-indigo-300 rounded-full text-sm transition-all outline-none border w-32 focus:w-64"
                 />
-              ))}
-            </div>
-            {memories.length === 0 && (
-              <div className="text-center py-20 border-2 border-dashed border-slate-200 rounded-3xl mt-8">
-                <p className="text-slate-400 mb-4">Noch gähnende Leere hier.</p>
-                <Button variant="secondary" onClick={startCreate}>
-                  Trau dich Buzi
-                </Button>
               </div>
-            )}
-          </main>
+
+              {/* View Toggles */}
+              <div className="flex bg-slate-100 p-1 rounded-lg">
+                <button 
+                  onClick={() => setViewMode('grid')}
+                  className={`p-2 rounded-md transition-all ${viewMode === 'grid' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+                  title="Grid View"
+                >
+                   <Grid size={18} />
+                </button>
+                <button 
+                  onClick={() => setViewMode('map')}
+                  className={`p-2 rounded-md transition-all ${viewMode === 'map' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+                  title="Map View"
+                >
+                   <MapIcon size={18} />
+                </button>
+              </div>
+
+              <div className="h-6 w-px bg-slate-200"></div>
+
+              <Button onClick={startCreate}>
+                <Plus size={18} /> <span className="hidden md:inline">Neu</span>
+              </Button>
+            </div>
+          </nav>
+
+          {viewMode === 'map' ? (
+             <InteractiveMap 
+               memories={filteredMemories} 
+               onNavigate={(mem) => openDetail(mem)}
+               onSelectLocation={(locName) => {
+                 setSearchTerm(locName);
+               }}
+             />
+          ) : (
+            <main className="max-w-6xl mx-auto p-6 pt-12">
+              <header className="mb-16 text-center max-w-2xl mx-auto">
+                <h2 className="text-5xl font-serif text-slate-900 mb-6">
+                  {searchTerm ? `Suche: "${searchTerm}"` : "Unsere Stories"}
+                </h2>
+                <p className="text-lg text-slate-500 leading-relaxed">
+                  {searchTerm 
+                    ? `${filteredMemories.length} Treffer gefunden.` 
+                    : "Das geheime Archiv für unsere Insider, Abenteuer und alles, was wir nicht vergessen wollen."}
+                </p>
+                {searchTerm && (
+                   <button 
+                     onClick={() => setSearchTerm("")}
+                     className="mt-4 text-indigo-600 font-bold text-sm hover:underline"
+                   >
+                     Suche zurücksetzen
+                   </button>
+                )}
+              </header>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {filteredMemories.map((mem) => (
+                  <MemoryCard
+                    key={mem.id}
+                    memory={mem}
+                    onClick={() => openDetail(mem)}
+                  />
+                ))}
+              </div>
+              {filteredMemories.length === 0 && (
+                <div className="text-center py-20 border-2 border-dashed border-slate-200 rounded-3xl mt-8">
+                  <p className="text-slate-400 mb-4">
+                     {searchTerm ? "Nichts gefunden. Probier was anderes!" : "Noch gähnende Leere hier."}
+                  </p>
+                  <Button variant="secondary" onClick={startCreate}>
+                    Trau dich Buzi
+                  </Button>
+                </div>
+              )}
+            </main>
+          )}
         </div>
       )}
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500;600&family=Caveat:wght@400;700&display=swap'); .font-serif { font-family: 'Playfair Display', serif; } .font-handwriting { font-family: 'Caveat', cursive; } body { font-family: 'Inter', sans-serif; } .animate-fade-in { animation: fadeIn 0.3s forwards; } @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } } .animate-slide-up { animation: slideUp 1s forwards; } @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }`}</style>
