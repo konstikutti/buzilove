@@ -11,6 +11,7 @@ import {
   signInAnonymously,
   onAuthStateChanged,
   updateProfile,
+  signInWithCustomToken,
 } from "firebase/auth";
 import {
   getFirestore,
@@ -568,7 +569,8 @@ const MapMarker = React.memo(({ x, y, loc, isSelected, onClick, children }) => (
     className="absolute transform -translate-x-1/2 -translate-y-full cursor-pointer group z-20 hover:z-30 transition-transform duration-200 ease-out"
     style={{ left: x, top: y }}
     onClick={onClick}
-    onMouseDown={(e) => e.stopPropagation()} // STOP PROPAGATION HERE
+    onMouseDown={(e) => e.stopPropagation()}
+    onTouchStart={(e) => e.stopPropagation()}
   >
     {children}
   </div>
@@ -576,25 +578,33 @@ const MapMarker = React.memo(({ x, y, loc, isSelected, onClick, children }) => (
 
 // Memoized Tile to prevent flicker
 const MapTile = React.memo(({ src, style }) => (
-  <img src={src} style={style} className="select-none grayscale-[0.2] contrast-[1.05]" alt="" />
+  <img
+    src={src}
+    style={style}
+    className="select-none grayscale-[0.2] contrast-[1.05]"
+    alt=""
+  />
 ));
 
 const InteractiveMap = ({ memories, onNavigate }) => {
-  const [center, setCenter] = useState({ lat: 51.1657, lng: 10.4515 }); 
+  const [center, setCenter] = useState({ lat: 51.1657, lng: 10.4515 });
   const [zoom, setZoom] = useState(5.5);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [fetchedCoords, setFetchedCoords] = useState({});
-  const [selectedLoc, setSelectedLoc] = useState(null); 
-  
-  // Interaction Refs - NO State update during drag for performance
+  const [selectedLoc, setSelectedLoc] = useState(null);
+
   const containerRef = useRef(null);
   const contentRef = useRef(null);
-  const dragRef = useRef({ 
-    active: false, 
-    startX: 0, 
-    startY: 0, 
-    startCenterPx: { x: 0, y: 0 } 
+
+  // Use a ref to store current state for event listeners to avoid stale closures
+  const stateRef = useRef({
+    zoom: 5.5,
+    center: { lat: 51.1657, lng: 10.4515 },
   });
+
+  useEffect(() => {
+    stateRef.current = { zoom, center };
+  }, [zoom, center]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -613,7 +623,11 @@ const InteractiveMap = ({ memories, onNavigate }) => {
   // Geocoding & Data Processing
   const geocodeLocation = async (loc) => {
     try {
-      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(loc)}&limit=1`);
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+          loc
+        )}&limit=1`
+      );
       const data = await response.json();
       if (data && data.length > 0) {
         return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
@@ -630,7 +644,8 @@ const InteractiveMap = ({ memories, onNavigate }) => {
     memories.forEach((mem) => {
       if (!mem.location) return;
       const normalizedName = mem.location.trim();
-      const cached = CITY_COORDS[normalizedName] || fetchedCoords[normalizedName];
+      const cached =
+        CITY_COORDS[normalizedName] || fetchedCoords[normalizedName];
       const coords = getCoordinates(normalizedName) || cached;
 
       if (coords) {
@@ -649,25 +664,27 @@ const InteractiveMap = ({ memories, onNavigate }) => {
         }
       }
     });
-    
-    Object.values(data).forEach(loc => {
-        loc.memories.sort((a,b) => getDateObj(b.date) - getDateObj(a.date));
-        loc.count = loc.memories.length;
+
+    Object.values(data).forEach((loc) => {
+      loc.memories.sort((a, b) => getDateObj(b.date) - getDateObj(a.date));
+      loc.count = loc.memories.length;
     });
 
     return { mapped: Object.values(data), unmapped };
   }, [memories, fetchedCoords]);
 
   useEffect(() => {
-    const unmappedNames = locationData.unmapped.map(u => u.name);
+    const unmappedNames = locationData.unmapped.map((u) => u.name);
     if (unmappedNames.length === 0) return;
     const fetchNext = async () => {
-      const target = unmappedNames.find(name => fetchedCoords[name] === undefined);
+      const target = unmappedNames.find(
+        (name) => fetchedCoords[name] === undefined
+      );
       if (!target) return;
-      setFetchedCoords(prev => ({ ...prev, [target]: null })); 
+      setFetchedCoords((prev) => ({ ...prev, [target]: null }));
       const coords = await geocodeLocation(target);
       if (coords) {
-        setFetchedCoords(prev => ({ ...prev, [target]: coords }));
+        setFetchedCoords((prev) => ({ ...prev, [target]: coords }));
       }
     };
     const timer = setTimeout(fetchNext, 1000);
@@ -681,7 +698,7 @@ const InteractiveMap = ({ memories, onNavigate }) => {
     siny = Math.min(Math.max(siny, -0.9999), 0.9999);
     return {
       x: scale * (0.5 + lng / 360),
-      y: scale * (0.5 - Math.log((1 + siny) / (1 - siny)) / (4 * Math.PI))
+      y: scale * (0.5 - Math.log((1 + siny) / (1 - siny)) / (4 * Math.PI)),
     };
   }, []);
 
@@ -695,89 +712,197 @@ const InteractiveMap = ({ memories, onNavigate }) => {
 
   // Map Vars
   const tileZoom = Math.floor(zoom);
-  const scale = Math.pow(2, zoom - tileZoom); 
+  const scale = Math.pow(2, zoom - tileZoom);
   const centerPx = project(center.lat, center.lng, zoom);
   const worldWidth = 256 * Math.pow(2, zoom);
 
-  // --- Interaction Logic with Window Listeners ---
+  // --- Unified Interaction Logic (Touch + Mouse) ---
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
 
-  const handleWindowMouseMove = useCallback((e) => {
-    if (!dragRef.current.active || !contentRef.current) return;
-    const dx = e.clientX - dragRef.current.startX;
-    const dy = e.clientY - dragRef.current.startY;
-    // Just move visually using CSS transform (GPU accelerated)
-    contentRef.current.style.transform = `translate(${dx}px, ${dy}px)`;
-  }, []);
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let startCenterPx = { x: 0, y: 0 };
 
-  const handleWindowMouseUp = useCallback((e) => {
-    if (!dragRef.current.active) return;
-    
-    const dx = e.clientX - dragRef.current.startX;
-    const dy = e.clientY - dragRef.current.startY;
-    
-    // Commit new center if moved
-    if (Math.abs(dx) > 0 || Math.abs(dy) > 0) {
-       const startPx = dragRef.current.startCenterPx;
-       const newCx = startPx.x - dx;
-       const newCy = startPx.y - dy;
-       
-       let newCenter = unproject(newCx, newCy, zoom);
+    // Pinch / Touch variables
+    let initialDist = 0;
+    let initialZoom = 0;
+    let isPinching = false;
 
-       // Hard clamp latitude to avoid gray areas
-       if (newCenter.lat > 85) newCenter.lat = 85;
-       if (newCenter.lat < -85) newCenter.lat = -85;
-       
-       setCenter(newCenter);
-    }
-    
-    dragRef.current.active = false;
-    
-    // Reset visual transform (React will re-render with new center)
-    if (contentRef.current) {
-        contentRef.current.style.transform = '';
-        contentRef.current.style.transition = ''; 
-    }
-    
-    // Clean up
-    window.removeEventListener('mousemove', handleWindowMouseMove);
-    window.removeEventListener('mouseup', handleWindowMouseUp);
-  }, [zoom, unproject, handleWindowMouseMove]);
-
-  const handleMouseDown = (e) => {
-    // Start Drag
-    dragRef.current = {
-      active: true,
-      startX: e.clientX,
-      startY: e.clientY,
-      startCenterPx: { ...centerPx } // Capture projected pixel center
+    const getDistance = (touches) => {
+      const dx = touches[0].clientX - touches[1].clientX;
+      const dy = touches[0].clientY - touches[1].clientY;
+      return Math.sqrt(dx * dx + dy * dy);
     };
-    
-    if (contentRef.current) contentRef.current.style.transition = 'none';
-    
-    // Attach window listeners to ensure we catch mouseup outside container
-    window.addEventListener('mousemove', handleWindowMouseMove);
-    window.addEventListener('mouseup', handleWindowMouseUp);
-  };
-  
-  const handleWheel = (e) => {
-    e.preventDefault();
-    const delta = -e.deltaY;
-    setZoom(z => Math.min(Math.max(z + delta * 0.002, 2), 19));
-  };
 
+    // --- MOUSE HANDLERS ---
+    const onMouseDown = (e) => {
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      const currZ = stateRef.current.zoom;
+      const currC = stateRef.current.center;
+      startCenterPx = project(currC.lat, currC.lng, currZ);
+      if (contentRef.current) contentRef.current.style.transition = "none";
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("mouseup", onMouseUp);
+    };
+
+    const onMouseMove = (e) => {
+      if (!isDragging) return;
+      e.preventDefault();
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if (contentRef.current) {
+        contentRef.current.style.transform = `translate(${dx}px, ${dy}px)`;
+      }
+    };
+
+    const onMouseUp = (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+
+      if (Math.abs(dx) > 0 || Math.abs(dy) > 0) {
+        const currZ = stateRef.current.zoom;
+        const startPx = startCenterPx;
+        const newCx = startPx.x - dx;
+        const newCy = startPx.y - dy;
+        let newCenter = unproject(newCx, newCy, currZ);
+
+        if (newCenter.lat > 85) newCenter.lat = 85;
+        if (newCenter.lat < -85) newCenter.lat = -85;
+
+        setCenter(newCenter);
+      }
+
+      isDragging = false;
+      if (contentRef.current) {
+        contentRef.current.style.transform = "";
+        contentRef.current.style.transition = "";
+      }
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+
+    // --- TOUCH HANDLERS (Native for passive: false) ---
+    const onTouchStart = (e) => {
+      if (e.touches.length === 1) {
+        // Drag Start
+        isDragging = true;
+        isPinching = false;
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        const currZ = stateRef.current.zoom;
+        const currC = stateRef.current.center;
+        startCenterPx = project(currC.lat, currC.lng, currZ);
+        if (contentRef.current) contentRef.current.style.transition = "none";
+      } else if (e.touches.length === 2) {
+        // Pinch Start
+        isPinching = true;
+        isDragging = false;
+        initialDist = getDistance(e.touches);
+        initialZoom = stateRef.current.zoom;
+        e.preventDefault(); // Stop browser zoom
+      }
+    };
+
+    const onTouchMove = (e) => {
+      e.preventDefault(); // Stop browser scrolling/zooming entirely within map
+      if (isDragging && e.touches.length === 1) {
+        const dx = e.touches[0].clientX - startX;
+        const dy = e.touches[0].clientY - startY;
+        if (contentRef.current) {
+          contentRef.current.style.transform = `translate(${dx}px, ${dy}px)`;
+        }
+      } else if (isPinching && e.touches.length === 2) {
+        const dist = getDistance(e.touches);
+        if (initialDist > 0) {
+          const ratio = dist / initialDist;
+          // Simple logarithmic scaling for zoom
+          const zoomDelta = Math.log2(ratio);
+          let newZoom = initialZoom + zoomDelta;
+          newZoom = Math.max(2, Math.min(newZoom, 19));
+          setZoom(newZoom);
+        }
+      }
+    };
+
+    const onTouchEnd = (e) => {
+      if (isDragging && e.touches.length === 0) {
+        // Commit drag
+        // We need to calculate dx/dy based on the LAST touch position vs start
+        // Since touch is gone, we rely on the transform currently applied
+        if (contentRef.current) {
+          const style = window.getComputedStyle(contentRef.current);
+          const matrix = new WebKitCSSMatrix(style.transform);
+          const dx = matrix.m41;
+          const dy = matrix.m42;
+
+          if (Math.abs(dx) > 0 || Math.abs(dy) > 0) {
+            const currZ = stateRef.current.zoom;
+            const startPx = startCenterPx;
+            const newCx = startPx.x - dx;
+            const newCy = startPx.y - dy;
+            let newCenter = unproject(newCx, newCy, currZ);
+
+            if (newCenter.lat > 85) newCenter.lat = 85;
+            if (newCenter.lat < -85) newCenter.lat = -85;
+            setCenter(newCenter);
+          }
+          contentRef.current.style.transform = "";
+          contentRef.current.style.transition = "";
+        }
+        isDragging = false;
+      }
+      if (isPinching && e.touches.length < 2) {
+        isPinching = false;
+      }
+    };
+
+    // --- WHEEL HANDLER ---
+    const onWheel = (e) => {
+      e.preventDefault(); // Always prevent default to stop page scroll/zoom
+      const delta = -e.deltaY;
+
+      // Check for trackpad pinch (ctrlKey usually set)
+      // Or just standard mouse wheel
+      const speed = e.ctrlKey ? 0.01 : 0.002;
+
+      setZoom((z) => Math.min(Math.max(z + delta * speed, 2), 19));
+    };
+
+    el.addEventListener("mousedown", onMouseDown);
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd);
+    el.addEventListener("wheel", onWheel, { passive: false });
+
+    return () => {
+      el.removeEventListener("mousedown", onMouseDown);
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("wheel", onWheel);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [project, unproject]); // Dependencies for project/unproject mostly static
 
   // --- Rendering ---
-  
+
   const tiles = useMemo(() => {
     if (dimensions.width === 0) return [];
-    
+
     const t = [];
     const centerPxInt = project(center.lat, center.lng, tileZoom);
-    
-    const viewLeftInt = centerPxInt.x - (dimensions.width / 2) / scale;
-    const viewTopInt = centerPxInt.y - (dimensions.height / 2) / scale;
-    const viewRightInt = centerPxInt.x + (dimensions.width / 2) / scale;
-    const viewBottomInt = centerPxInt.y + (dimensions.height / 2) / scale;
+
+    const viewLeftInt = centerPxInt.x - dimensions.width / 2 / scale;
+    const viewTopInt = centerPxInt.y - dimensions.height / 2 / scale;
+    const viewRightInt = centerPxInt.x + dimensions.width / 2 / scale;
+    const viewBottomInt = centerPxInt.y + dimensions.height / 2 / scale;
 
     const minX = Math.floor(viewLeftInt / TILE_SIZE) - 1; // Buffer
     const maxX = Math.floor(viewRightInt / TILE_SIZE) + 1;
@@ -792,17 +917,17 @@ const InteractiveMap = ({ memories, onNavigate }) => {
         const tileX = ((x % maxTiles) + maxTiles) % maxTiles;
         const left = (x * TILE_SIZE - viewLeftInt) * scale;
         const top = (y * TILE_SIZE - viewTopInt) * scale;
-        
+
         t.push({
           key: `${tileZoom}-${x}-${y}`,
           src: `https://tile.openstreetmap.org/${tileZoom}/${tileX}/${y}.png`,
           style: {
-            position: 'absolute',
+            position: "absolute",
             left: left,
             top: top,
             width: Math.ceil(TILE_SIZE * scale),
             height: Math.ceil(TILE_SIZE * scale),
-          }
+          },
         });
       }
     }
@@ -812,71 +937,98 @@ const InteractiveMap = ({ memories, onNavigate }) => {
   const markers = locationData.mapped.map((loc, i) => {
     const markerPx = project(loc.lat, loc.lng, zoom);
     let deltaX = markerPx.x - centerPx.x;
-    
+
     while (deltaX > worldWidth / 2) deltaX -= worldWidth;
     while (deltaX < -worldWidth / 2) deltaX += worldWidth;
 
-    const x = (dimensions.width / 2) + deltaX;
+    const x = dimensions.width / 2 + deltaX;
     const y = markerPx.y - (centerPx.y - dimensions.height / 2);
 
     // Increase buffer area significantly to prevent pins flickering when near edges
     // Pins might stick out of the visible map area
-    if (x < -200 || x > dimensions.width + 200 || y < -200 || y > dimensions.height + 200) return null;
+    if (
+      x < -200 ||
+      x > dimensions.width + 200 ||
+      y < -200 ||
+      y > dimensions.height + 200
+    )
+      return null;
 
     const latestMemory = loc.memories[0];
-    const thumbUrl = latestMemory.previewImage || (latestMemory.images && latestMemory.images.length > 0 ? latestMemory.images[0] : null);
+    const thumbUrl =
+      latestMemory.previewImage ||
+      (latestMemory.images && latestMemory.images.length > 0
+        ? latestMemory.images[0]
+        : null);
     const count = loc.count;
 
     return (
-        <MapMarker 
-            key={`${i}-${loc.name}`}
-            x={x} 
-            y={y} 
-            loc={loc} 
-            isSelected={selectedLoc === loc}
-            onClick={(e) => { e.stopPropagation(); setSelectedLoc(loc); }}
-        >
-            <div className="relative flex flex-col items-center">
-                <div className={`relative transition-all duration-300 ${selectedLoc === loc ? 'scale-125 z-50' : 'hover:scale-110 z-20'}`}>
-                    {count > 1 && (
-                        <div className="absolute top-[-4px] left-1/2 -translate-x-1/2 w-10 h-10 bg-white rounded-full shadow-md border-2 border-white opacity-60 z-0"></div>
-                    )}
-                    <div className={`relative z-10 w-12 h-12 rounded-full border-4 shadow-lg overflow-hidden bg-white ${selectedLoc === loc ? 'border-indigo-600 ring-2 ring-indigo-200' : 'border-white'}`}>
-                        {thumbUrl ? (
-                            <img src={thumbUrl} className="w-full h-full object-cover" alt={loc.name} />
-                        ) : (
-                            <div className="w-full h-full flex items-center justify-center bg-indigo-50 text-indigo-500">
-                                <MapPin size={20} fill="currentColor"/>
-                            </div>
-                        )}
-                    </div>
-                    {count > 1 && (
-                        <div className="absolute -top-2 -right-2 bg-indigo-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-white shadow-sm z-20">
-                            {count}
-                        </div>
-                    )}
-                    <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-white absolute left-1/2 -translate-x-1/2 -bottom-2 drop-shadow-sm"></div>
+      <MapMarker
+        key={`${i}-${loc.name}`}
+        x={x}
+        y={y}
+        loc={loc}
+        isSelected={selectedLoc === loc}
+        onClick={(e) => {
+          e.stopPropagation();
+          setSelectedLoc(loc);
+        }}
+      >
+        <div className="relative flex flex-col items-center">
+          <div
+            className={`relative transition-all duration-300 ${
+              selectedLoc === loc ? "scale-125 z-50" : "hover:scale-110 z-20"
+            }`}
+          >
+            {count > 1 && (
+              <div className="absolute top-[-4px] left-1/2 -translate-x-1/2 w-10 h-10 bg-white rounded-full shadow-md border-2 border-white opacity-60 z-0"></div>
+            )}
+            <div
+              className={`relative z-10 w-12 h-12 rounded-full border-4 shadow-lg overflow-hidden bg-white ${
+                selectedLoc === loc
+                  ? "border-indigo-600 ring-2 ring-indigo-200"
+                  : "border-white"
+              }`}
+            >
+              {thumbUrl ? (
+                <img
+                  src={thumbUrl}
+                  className="w-full h-full object-cover"
+                  alt={loc.name}
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-indigo-50 text-indigo-500">
+                  <MapPin size={20} fill="currentColor" />
                 </div>
+              )}
             </div>
-        </MapMarker>
+            {count > 1 && (
+              <div className="absolute -top-2 -right-2 bg-indigo-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-white shadow-sm z-20">
+                {count}
+              </div>
+            )}
+            <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-white absolute left-1/2 -translate-x-1/2 -bottom-2 drop-shadow-sm"></div>
+          </div>
+        </div>
+      </MapMarker>
     );
   });
 
   return (
     <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden bg-slate-100 relative">
-      <div 
+      <div
         ref={containerRef}
         className="flex-1 relative overflow-hidden cursor-move bg-[#cad2d3]"
-        onWheel={handleWheel}
-        onMouseDown={handleMouseDown}
-        // MouseMove/Up handled by window listeners now
-        onClick={() => setSelectedLoc(null)} 
+        style={{ touchAction: "none" }} // Critical for touch handling
+        onClick={() => setSelectedLoc(null)}
       >
         <div ref={contentRef} className="absolute inset-0 w-full h-full">
-            {/* Tiles */}
-            {tiles.map(t => <MapTile key={t.key} {...t} />)}
-            {/* Markers */}
-            {markers}
+          {/* Tiles */}
+          {tiles.map((t) => (
+            <MapTile key={t.key} {...t} />
+          ))}
+          {/* Markers */}
+          {markers}
         </div>
 
         <div className="absolute bottom-1 right-1 bg-white/70 px-1 text-[10px] text-slate-600 pointer-events-none z-10 rounded">
@@ -884,57 +1036,93 @@ const InteractiveMap = ({ memories, onNavigate }) => {
         </div>
 
         <div className="absolute right-6 bottom-8 flex flex-col gap-2 z-50">
-           <button onClick={(e) => { e.stopPropagation(); setZoom(z => Math.min(z + 1, 19)); }} className="bg-white p-2 rounded-xl shadow-lg hover:bg-slate-50 text-slate-700"><PlusIcon size={20}/></button>
-           <button onClick={(e) => { e.stopPropagation(); setZoom(z => Math.max(z - 1, 2)); }} className="bg-white p-2 rounded-xl shadow-lg hover:bg-slate-50 text-slate-700"><MinusIcon size={20}/></button>
-           <button onClick={(e) => { e.stopPropagation(); setZoom(5.5); setCenter({ lat: 51.1657, lng: 10.4515 }); }} className="bg-white p-2 rounded-xl shadow-lg hover:bg-slate-50 text-slate-700"><Navigation size={20}/></button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setZoom((z) => Math.min(z + 1, 19));
+            }}
+            className="bg-white p-2 rounded-xl shadow-lg hover:bg-slate-50 text-slate-700"
+          >
+            <PlusIcon size={20} />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setZoom((z) => Math.max(z - 1, 2));
+            }}
+            className="bg-white p-2 rounded-xl shadow-lg hover:bg-slate-50 text-slate-700"
+          >
+            <MinusIcon size={20} />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setZoom(5.5);
+              setCenter({ lat: 51.1657, lng: 10.4515 });
+            }}
+            className="bg-white p-2 rounded-xl shadow-lg hover:bg-slate-50 text-slate-700"
+          >
+            <Navigation size={20} />
+          </button>
         </div>
 
         {selectedLoc && (
-            <div 
-                className="absolute bottom-8 left-1/2 -translate-x-1/2 w-[90%] max-w-sm bg-white rounded-2xl shadow-2xl z-50 overflow-hidden animate-in slide-in-from-bottom-4 fade-in"
-                onClick={(e) => e.stopPropagation()} 
-            >
-                <div className="bg-indigo-600 p-3 flex justify-between items-center text-white">
-                    <div className="flex items-center gap-2 font-bold text-sm">
-                        <MapPin size={16} /> {selectedLoc.name}
-                    </div>
-                    <button onClick={() => setSelectedLoc(null)} className="hover:bg-indigo-700 rounded-full p-1"><X size={16}/></button>
-                </div>
-                <div className="max-h-60 overflow-y-auto p-2 scrollbar-thin">
-                    {selectedLoc.memories.map((mem) => {
-                        const thumb = mem.previewImage || (mem.images?.[0]);
-                        return (
-                            <div 
-                                key={mem.id} 
-                                onClick={() => onNavigate(mem)}
-                                className="flex gap-3 items-center p-2 hover:bg-slate-50 rounded-xl cursor-pointer transition-colors border-b last:border-0 border-slate-100"
-                            >
-                                <div className="w-12 h-12 rounded-lg bg-slate-200 overflow-hidden flex-shrink-0 border border-slate-100">
-                                    {thumb ? (
-                                        <img src={thumb} className="w-full h-full object-cover" />
-                                    ) : (
-                                        <div className="flex items-center justify-center h-full text-slate-400"><ImageIcon size={16}/></div>
-                                    )}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <h4 className="font-bold text-slate-800 text-sm truncate">{mem.title}</h4>
-                                    <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
-                                        <Calendar size={10} />
-                                        <span>{formatDateSafe(mem.date)}</span>
-                                    </div>
-                                </div>
-                                <ChevronRight size={16} className="text-slate-300" />
-                            </div>
-                        );
-                    })}
-                </div>
+          <div
+            className="absolute bottom-8 left-1/2 -translate-x-1/2 w-[90%] max-w-sm bg-white rounded-2xl shadow-2xl z-50 overflow-hidden animate-in slide-in-from-bottom-4 fade-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-indigo-600 p-3 flex justify-between items-center text-white">
+              <div className="flex items-center gap-2 font-bold text-sm">
+                <MapPin size={16} /> {selectedLoc.name}
+              </div>
+              <button
+                onClick={() => setSelectedLoc(null)}
+                className="hover:bg-indigo-700 rounded-full p-1"
+              >
+                <X size={16} />
+              </button>
             </div>
+            <div className="max-h-60 overflow-y-auto p-2 scrollbar-thin">
+              {selectedLoc.memories.map((mem) => {
+                const thumb = mem.previewImage || mem.images?.[0];
+                return (
+                  <div
+                    key={mem.id}
+                    onClick={() => onNavigate(mem)}
+                    className="flex gap-3 items-center p-2 hover:bg-slate-50 rounded-xl cursor-pointer transition-colors border-b last:border-0 border-slate-100"
+                  >
+                    <div className="w-12 h-12 rounded-lg bg-slate-200 overflow-hidden flex-shrink-0 border border-slate-100">
+                      {thumb ? (
+                        <img
+                          src={thumb}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center h-full text-slate-400">
+                          <ImageIcon size={16} />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-bold text-slate-800 text-sm truncate">
+                        {mem.title}
+                      </h4>
+                      <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
+                        <Calendar size={10} />
+                        <span>{formatDateSafe(mem.date)}</span>
+                      </div>
+                    </div>
+                    <ChevronRight size={16} className="text-slate-300" />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         )}
       </div>
     </div>
   );
 };
-
 
 // --- EDITOR SUB-COMPONENTS ---
 
@@ -2312,7 +2500,7 @@ export default function App() {
   const [editingId, setEditingId] = useState(null);
   const [originalData, setOriginalData] = useState(null);
   const [toasts, setToasts] = useState([]);
-  
+
   // New States
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState("grid"); // 'grid' | 'map'
@@ -2355,10 +2543,22 @@ export default function App() {
   };
 
   useEffect(() => {
-    const init = async () => {
-      await signInAnonymously(auth);
+    const initAuth = async () => {
+      if (typeof __initial_auth_token !== "undefined" && __initial_auth_token) {
+        try {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } catch (err) {
+          console.warn(
+            "Auth with custom token failed (likely config mismatch), falling back to anonymous:",
+            err
+          );
+          await signInAnonymously(auth);
+        }
+      } else {
+        await signInAnonymously(auth);
+      }
     };
-    init();
+    initAuth();
     return onAuthStateChanged(auth, (u) => {
       setUser(u);
       setLoading(false);
@@ -2371,16 +2571,15 @@ export default function App() {
       collection(db, "artifacts", appId, "public", "data", "memories")
     );
     return onSnapshot(q, (snap) => {
-      const data = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() }));
-      
+      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
       // Strict sorting: Newest first (Left to right flow in standard grid)
       const sorted = data.sort((a, b) => {
         const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date || 0);
         const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date || 0);
         return dateB - dateA;
       });
-      
+
       setMemories(sorted);
     });
   }, [user]);
@@ -2694,15 +2893,16 @@ export default function App() {
       setIsDeleting(false);
     }
   };
-  
+
   // Filtering logic
   const filteredMemories = useMemo(() => {
     if (!searchTerm) return memories;
     const lower = searchTerm.toLowerCase();
-    return memories.filter(m => 
-       m.title?.toLowerCase().includes(lower) || 
-       m.location?.toLowerCase().includes(lower) ||
-       m.author?.toLowerCase().includes(lower)
+    return memories.filter(
+      (m) =>
+        m.title?.toLowerCase().includes(lower) ||
+        m.location?.toLowerCase().includes(lower) ||
+        m.author?.toLowerCase().includes(lower)
     );
   }, [memories, searchTerm]);
 
@@ -3030,7 +3230,11 @@ export default function App() {
         <div>
           <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur border-b px-6 h-20 flex items-center justify-between">
             <div
-              onClick={() => { setView("home"); setViewMode('grid'); setSearchTerm(""); }}
+              onClick={() => {
+                setView("home");
+                setViewMode("grid");
+                setSearchTerm("");
+              }}
               className="flex items-center gap-2 cursor-pointer"
             >
               <Sparkles className="text-indigo-600" />
@@ -3038,12 +3242,12 @@ export default function App() {
                 BUZI Tagebuch
               </span>
             </div>
-            
+
             <div className="flex items-center gap-4">
               {/* Search Bar */}
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search size={16} className="text-slate-400"/>
+                  <Search size={16} className="text-slate-400" />
                 </div>
                 <input
                   type="text"
@@ -3056,19 +3260,27 @@ export default function App() {
 
               {/* View Toggles */}
               <div className="flex bg-slate-100 p-1 rounded-lg">
-                <button 
-                  onClick={() => setViewMode('grid')}
-                  className={`p-2 rounded-md transition-all ${viewMode === 'grid' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+                <button
+                  onClick={() => setViewMode("grid")}
+                  className={`p-2 rounded-md transition-all ${
+                    viewMode === "grid"
+                      ? "bg-white shadow-sm text-indigo-600"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
                   title="Grid View"
                 >
-                   <Grid size={18} />
+                  <Grid size={18} />
                 </button>
-                <button 
-                  onClick={() => setViewMode('map')}
-                  className={`p-2 rounded-md transition-all ${viewMode === 'map' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+                <button
+                  onClick={() => setViewMode("map")}
+                  className={`p-2 rounded-md transition-all ${
+                    viewMode === "map"
+                      ? "bg-white shadow-sm text-indigo-600"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
                   title="Map View"
                 >
-                   <MapIcon size={18} />
+                  <MapIcon size={18} />
                 </button>
               </div>
 
@@ -3080,14 +3292,14 @@ export default function App() {
             </div>
           </nav>
 
-          {viewMode === 'map' ? (
-             <InteractiveMap 
-               memories={filteredMemories} 
-               onNavigate={(mem) => openDetail(mem)}
-               onSelectLocation={(locName) => {
-                 setSearchTerm(locName);
-               }}
-             />
+          {viewMode === "map" ? (
+            <InteractiveMap
+              memories={filteredMemories}
+              onNavigate={(mem) => openDetail(mem)}
+              onSelectLocation={(locName) => {
+                setSearchTerm(locName);
+              }}
+            />
           ) : (
             <main className="max-w-6xl mx-auto p-6 pt-12">
               <header className="mb-16 text-center max-w-2xl mx-auto">
@@ -3095,17 +3307,17 @@ export default function App() {
                   {searchTerm ? `Suche: "${searchTerm}"` : "Unsere Stories"}
                 </h2>
                 <p className="text-lg text-slate-500 leading-relaxed">
-                  {searchTerm 
-                    ? `${filteredMemories.length} Treffer gefunden.` 
+                  {searchTerm
+                    ? `${filteredMemories.length} Treffer gefunden.`
                     : "Das geheime Archiv für unsere Insider, Abenteuer und alles, was wir nicht vergessen wollen."}
                 </p>
                 {searchTerm && (
-                   <button 
-                     onClick={() => setSearchTerm("")}
-                     className="mt-4 text-indigo-600 font-bold text-sm hover:underline"
-                   >
-                     Suche zurücksetzen
-                   </button>
+                  <button
+                    onClick={() => setSearchTerm("")}
+                    className="mt-4 text-indigo-600 font-bold text-sm hover:underline"
+                  >
+                    Suche zurücksetzen
+                  </button>
                 )}
               </header>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -3120,7 +3332,9 @@ export default function App() {
               {filteredMemories.length === 0 && (
                 <div className="text-center py-20 border-2 border-dashed border-slate-200 rounded-3xl mt-8">
                   <p className="text-slate-400 mb-4">
-                     {searchTerm ? "Nichts gefunden. Probier was anderes!" : "Noch gähnende Leere hier."}
+                    {searchTerm
+                      ? "Nichts gefunden. Probier was anderes!"
+                      : "Noch gähnende Leere hier."}
                   </p>
                   <Button variant="secondary" onClick={startCreate}>
                     Trau dich Buzi
