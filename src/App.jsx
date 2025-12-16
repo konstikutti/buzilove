@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
+} from "react";
 import { initializeApp } from "firebase/app";
 import {
   getAuth,
@@ -60,9 +66,9 @@ import {
   CheckCircle,
   XCircle,
   Italic,
-  Bold, 
+  Bold,
   AArrowUp,
-  CalendarDays
+  CalendarDays,
 } from "lucide-react";
 
 // --- Firebase Konfiguration ---
@@ -94,7 +100,12 @@ const ACCENT_COLORS = [
 ];
 
 const BG_STYLES = [
-  { id: "clean", name: "Clean", desc: "Weiß", css: "bg-white border-slate-200" },
+  {
+    id: "clean",
+    name: "Clean",
+    desc: "Weiß",
+    css: "bg-white border-slate-200",
+  },
   {
     id: "soft",
     name: "Soft",
@@ -110,26 +121,26 @@ const BG_STYLES = [
 ];
 
 const FONT_OPTIONS = [
-    { id: 'font-sans', name: 'Modern' },
-    { id: 'font-serif', name: 'Buch' },
-    { id: 'font-handwriting', name: 'Hand' },
-    { id: 'font-mono', name: 'Mono' },
+  { id: "font-sans", name: "Modern" },
+  { id: "font-serif", name: "Buch" },
+  { id: "font-handwriting", name: "Hand" },
+  { id: "font-mono", name: "Mono" },
 ];
 
 // --- Helfer: Sicheres Datum ---
 const formatDateSafe = (dateInput) => {
-    if (!dateInput) return '';
-    try {
-        const d = dateInput.toDate ? dateInput.toDate() : new Date(dateInput);
-        if (isNaN(d.getTime())) return ''; 
-        return d.toLocaleDateString('de-DE', { 
-            day: 'numeric', 
-            month: 'long', 
-            year: 'numeric' 
-        });
-    } catch (e) {
-        return '';
-    }
+  if (!dateInput) return "";
+  try {
+    const d = dateInput.toDate ? dateInput.toDate() : new Date(dateInput);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleDateString("de-DE", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  } catch (e) {
+    return "";
+  }
 };
 
 // --- Helfer: Intelligente Bildkomprimierung ---
@@ -205,7 +216,7 @@ const fetchAssets = async (assetIds) => {
 
   const results = await Promise.all(promises);
   // Removed filter(Boolean) to keep index alignment
-  return results; 
+  return results;
 };
 
 const hydrateBlocks = (blocks, images) => {
@@ -218,7 +229,7 @@ const hydrateBlocks = (blocks, images) => {
         const item = images[index];
         if (!item) return "";
         // Handle both simple strings (legacy/view) and objects (edit mode)
-        return typeof item === 'object' ? item.url : item;
+        return typeof item === "object" ? item.url : item;
       }
       return content;
     };
@@ -235,11 +246,11 @@ const dehydrateBlocks = (blocks, images) => {
     const newBlock = { ...block };
     const makeRef = (content) => {
       // Handle images array of objects or strings
-      const index = images.findIndex(img => {
-          const url = typeof img === 'object' ? img.url : img;
-          return url === content;
+      const index = images.findIndex((img) => {
+        const url = typeof img === "object" ? img.url : img;
+        return url === content;
       });
-      
+
       if (index !== -1) return `IMG_REF_${index}`;
       return content;
     };
@@ -310,11 +321,11 @@ const LazyInput = ({ value, onChange, ...props }) => {
   };
 
   return (
-    <input 
-      value={localValue} 
-      onChange={handleChange} 
-      onBlur={handleBlur} 
-      {...props} 
+    <input
+      value={localValue}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      {...props}
     />
   );
 };
@@ -337,11 +348,11 @@ const LazyTextarea = ({ value, onChange, ...props }) => {
   };
 
   return (
-    <textarea 
-      value={localValue} 
-      onChange={handleChange} 
-      onBlur={handleBlur} 
-      {...props} 
+    <textarea
+      value={localValue}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      {...props}
     />
   );
 };
@@ -363,33 +374,33 @@ const Input = ({
       </label>
     )}
     {/* Nutze LazyInput für Performance im Editor, normales input für Login */}
-    {type === 'text' && typeof onChange === 'function' ? (
-        <LazyInput
-          name={name}
-          type={type}
-          value={value}
-          onChange={onChange}
-          placeholder={placeholder}
-          className={`w-full p-3 bg-slate-50 border rounded-xl focus:ring-2 focus:outline-none transition-all text-slate-700 ${
-            error
-              ? "border-red-300 focus:ring-red-200 bg-red-50"
-              : "border-slate-200 focus:ring-indigo-500"
-          }`}
-        />
+    {type === "text" && typeof onChange === "function" ? (
+      <LazyInput
+        name={name}
+        type={type}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className={`w-full p-3 bg-slate-50 border rounded-xl focus:ring-2 focus:outline-none transition-all text-slate-700 ${
+          error
+            ? "border-red-300 focus:ring-red-200 bg-red-50"
+            : "border-slate-200 focus:ring-indigo-500"
+        }`}
+      />
     ) : (
-        <input
-          name={name}
-          type={type}
-          // Wenn value existiert, nutzen wir es. Sonst lassen wir es weg (für Login)
-          {...(value !== undefined ? { value } : {})}
-          onChange={onChange}
-          placeholder={placeholder}
-          className={`w-full p-3 bg-slate-50 border rounded-xl focus:ring-2 focus:outline-none transition-all text-slate-700 ${
-            error
-              ? "border-red-300 focus:ring-red-200 bg-red-50"
-              : "border-slate-200 focus:ring-indigo-500"
-          }`}
-        />
+      <input
+        name={name}
+        type={type}
+        // Wenn value existiert, nutzen wir es. Sonst lassen wir es weg (für Login)
+        {...(value !== undefined ? { value } : {})}
+        onChange={onChange}
+        placeholder={placeholder}
+        className={`w-full p-3 bg-slate-50 border rounded-xl focus:ring-2 focus:outline-none transition-all text-slate-700 ${
+          error
+            ? "border-red-300 focus:ring-red-200 bg-red-50"
+            : "border-slate-200 focus:ring-indigo-500"
+        }`}
+      />
     )}
   </div>
 );
@@ -459,331 +470,407 @@ const DraggableImage = ({
 
 // Memoized Image Selector to prevent heavy re-renders
 const ImageSelector = React.memo(({ current, onSelect, uploadedImages }) => (
-    <div className="flex gap-2 mb-2 overflow-x-auto pb-2 scrollbar-thin">
-      {uploadedImages.map((img, i) => (
-        <div
-          key={i}
-          onClick={() => onSelect(typeof img === 'object' ? img.url : img)}
-          className={`w-10 h-10 flex-shrink-0 rounded-md overflow-hidden cursor-pointer border-2 transition-all ${
-            current === (typeof img === 'object' ? img.url : img)
-              ? "border-indigo-500 ring-2 ring-indigo-200"
-              : "border-transparent"
-          }`}
-        >
-          <img src={typeof img === 'object' ? img.url : img} className="w-full h-full object-cover" loading="lazy" />
-        </div>
-      ))}
-      {uploadedImages.length === 0 && (
-        <span className="text-xs text-slate-400">Keine Fotos verfügbar.</span>
-      )}
-    </div>
+  <div className="flex gap-2 mb-2 overflow-x-auto pb-2 scrollbar-thin">
+    {uploadedImages.map((img, i) => (
+      <div
+        key={i}
+        onClick={() => onSelect(typeof img === "object" ? img.url : img)}
+        className={`w-10 h-10 flex-shrink-0 rounded-md overflow-hidden cursor-pointer border-2 transition-all ${
+          current === (typeof img === "object" ? img.url : img)
+            ? "border-indigo-500 ring-2 ring-indigo-200"
+            : "border-transparent"
+        }`}
+      >
+        <img
+          src={typeof img === "object" ? img.url : img}
+          className="w-full h-full object-cover"
+          loading="lazy"
+        />
+      </div>
+    ))}
+    {uploadedImages.length === 0 && (
+      <span className="text-xs text-slate-400">Keine Fotos verfügbar.</span>
+    )}
+  </div>
 ));
 
 // Optimized BlockItem with custom comparison to prevent re-renders when other blocks change
-const BlockItem = React.memo(({ block, index, total, updateBlock, removeBlock, moveBlock, uploadedImages }) => {
+const BlockItem = React.memo(
+  ({
+    block,
+    index,
+    total,
+    updateBlock,
+    removeBlock,
+    moveBlock,
+    uploadedImages,
+  }) => {
     return (
-        <div
-          className="group relative bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-indigo-300 transition-all"
-        >
-          {/* Controls */}
-          <div className="absolute right-2 top-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 backdrop-blur p-1 rounded-lg border border-slate-100 shadow-sm z-20">
-            <Button
-              variant="icon"
-              className="!p-1 h-6 w-6"
-              onClick={() => moveBlock(index, "up")}
-              disabled={index === 0}
+      <div className="group relative bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-indigo-300 transition-all">
+        {/* Controls */}
+        <div className="absolute right-2 top-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 backdrop-blur p-1 rounded-lg border border-slate-100 shadow-sm z-20">
+          <Button
+            variant="icon"
+            className="!p-1 h-6 w-6"
+            onClick={() => moveBlock(index, "up")}
+            disabled={index === 0}
+          >
+            <ChevronUp size={14} />
+          </Button>
+          <Button
+            variant="icon"
+            className="!p-1 h-6 w-6"
+            onClick={() => moveBlock(index, "down")}
+            disabled={index === total - 1}
+          >
+            <ChevronDown size={14} />
+          </Button>
+          <div className="w-px bg-slate-200 mx-1"></div>
+          <Button
+            variant="icon"
+            className="!p-1 h-6 w-6 text-red-500 hover:bg-red-50"
+            onClick={() => removeBlock(block.id)}
+          >
+            <Trash2 size={14} />
+          </Button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 mb-3 border-b border-slate-50 pb-2 pr-24 relative">
+          <div className="relative">
+            <select
+              value={block.animation || "none"}
+              onChange={(e) =>
+                updateBlock(block.id, { animation: e.target.value })
+              }
+              className="appearance-none bg-slate-50 text-xs font-medium text-slate-600 pl-6 pr-2 py-1 rounded border hover:border-slate-300"
             >
-              <ChevronUp size={14} />
-            </Button>
-            <Button
-              variant="icon"
-              className="!p-1 h-6 w-6"
-              onClick={() => moveBlock(index, "down")}
-              disabled={index === total - 1}
-            >
-              <ChevronDown size={14} />
-            </Button>
-            <div className="w-px bg-slate-200 mx-1"></div>
-            <Button
-              variant="icon"
-              className="!p-1 h-6 w-6 text-red-500 hover:bg-red-50"
-              onClick={() => removeBlock(block.id)}
-            >
-              <Trash2 size={14} />
-            </Button>
+              <option value="none">Keine Anim</option>
+              <option value="fade-in">Fade</option>
+              <option value="slide-up">Slide</option>
+              <option value="zoom-in">Zoom</option>
+            </select>
+            <Play
+              size={10}
+              className="absolute left-2 top-1.5 text-slate-400"
+            />
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 mb-3 border-b border-slate-50 pb-2 pr-24 relative">
-            <div className="relative">
-              <select
-                value={block.animation || "none"}
-                onChange={(e) =>
-                  updateBlock(block.id, { animation: e.target.value })
-                }
-                className="appearance-none bg-slate-50 text-xs font-medium text-slate-600 pl-6 pr-2 py-1 rounded border hover:border-slate-300"
-              >
-                <option value="none">Keine Anim</option>
-                <option value="fade-in">Fade</option>
-                <option value="slide-up">Slide</option>
-                <option value="zoom-in">Zoom</option>
-              </select>
-              <Play
-                size={10}
-                className="absolute left-2 top-1.5 text-slate-400"
-              />
-            </div>
-             
-            {(["header", "text", "quote", "note"].includes(block.type) || (block.type === 'image' && (block.layout === 'left' || block.layout === 'right'))) && (
-                <>
-                    <div className="flex bg-slate-50 rounded border p-0.5 ml-2">
-                        <select 
-                            value={block.font || 'font-sans'} 
-                            onChange={(e) => updateBlock(block.id, { font: e.target.value })}
-                            className="text-xs bg-transparent border-none focus:ring-0 py-1 pl-2 pr-6 cursor-pointer"
-                        >
-                            {FONT_OPTIONS.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                        </select>
-                    </div>
-                    <div className="flex gap-1 ml-1">
-                        <button 
-                            onClick={() => updateBlock(block.id, { bold: !block.bold })}
-                            className={`p-1.5 rounded border ${block.bold ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-white border-slate-200 text-slate-400'}`}
-                            title="Fett"
-                        >
-                            <Bold size={12}/>
-                        </button>
-                        <button 
-                            onClick={() => updateBlock(block.id, { italic: !block.italic })}
-                            className={`p-1.5 rounded border ${block.italic ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-white border-slate-200 text-slate-400'}`}
-                            title="Kursiv"
-                        >
-                            <Italic size={12}/>
-                        </button>
-                    </div>
-                </>
-            )}
-
-             {["header", "text", "quote"].includes(block.type) && (
-                <>
-                    <div className="w-px h-4 bg-slate-200 mx-1"></div>
-                    <div className="flex bg-slate-50 rounded border p-0.5">
-                        <button onClick={() => updateBlock(block.id, { align: "left" })} className={`p-1 rounded ${block.align === "left" ? "bg-white shadow text-black" : "text-slate-400"}`}><AlignLeft size={12} /></button>
-                        <button onClick={() => updateBlock(block.id, { align: "center" })} className={`p-1 rounded ${block.align === "center" ? "bg-white shadow text-black" : "text-slate-400"}`}><AlignCenter size={12} /></button>
-                        <button onClick={() => updateBlock(block.id, { align: "right" })} className={`p-1 rounded ${block.align === "right" ? "bg-white shadow text-black" : "text-slate-400"}`}><AlignRight size={12} /></button>
-                    </div>
-                </>
-            )}
-
-            {block.type === "image" && (
+          {(["header", "text", "quote", "note"].includes(block.type) ||
+            (block.type === "image" &&
+              (block.layout === "left" || block.layout === "right"))) && (
+            <>
               <div className="flex bg-slate-50 rounded border p-0.5 ml-2">
-                <button
-                  onClick={() => updateBlock(block.id, { layout: "left" })}
-                  className={`p-1 rounded ${
-                    block.layout === "left"
-                      ? "bg-white shadow text-indigo-600"
-                      : "text-slate-400"
-                  }`}
-                  title="Bild Links + Text"
+                <select
+                  value={block.font || "font-sans"}
+                  onChange={(e) =>
+                    updateBlock(block.id, { font: e.target.value })
+                  }
+                  className="text-xs bg-transparent border-none focus:ring-0 py-1 pl-2 pr-6 cursor-pointer"
                 >
-                  <PanelLeft size={12} />
+                  {FONT_OPTIONS.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex gap-1 ml-1">
+                <button
+                  onClick={() => updateBlock(block.id, { bold: !block.bold })}
+                  className={`p-1.5 rounded border ${
+                    block.bold
+                      ? "bg-indigo-50 border-indigo-200 text-indigo-600"
+                      : "bg-white border-slate-200 text-slate-400"
+                  }`}
+                  title="Fett"
+                >
+                  <Bold size={12} />
                 </button>
                 <button
-                  onClick={() => updateBlock(block.id, { layout: "center" })}
-                  className={`p-1 rounded ${
-                    block.layout === "center"
-                      ? "bg-white shadow text-indigo-600"
-                      : "text-slate-400"
+                  onClick={() =>
+                    updateBlock(block.id, { italic: !block.italic })
+                  }
+                  className={`p-1.5 rounded border ${
+                    block.italic
+                      ? "bg-indigo-50 border-indigo-200 text-indigo-600"
+                      : "bg-white border-slate-200 text-slate-400"
                   }`}
+                  title="Kursiv"
                 >
-                  <BoxSelect size={12} />
-                </button>
-                <button
-                  onClick={() => updateBlock(block.id, { layout: "right" })}
-                  className={`p-1 rounded ${
-                    block.layout === "right"
-                      ? "bg-white shadow text-indigo-600"
-                      : "text-slate-400"
-                  }`}
-                  title="Bild Rechts + Text"
-                >
-                  <PanelRight size={12} />
-                </button>
-                <button
-                  onClick={() => updateBlock(block.id, { layout: "full" })}
-                  className={`p-1 rounded ${
-                    block.layout === "full"
-                      ? "bg-white shadow text-indigo-600"
-                      : "text-slate-400"
-                  }`}
-                >
-                  <Maximize size={12} />
+                  <Italic size={12} />
                 </button>
               </div>
-            )}
-          </div>
-
-          {block.type === "header" && (
-            <LazyInput
-              value={block.content || ""}
-              onChange={(e) =>
-                updateBlock(block.id, { content: e.target.value })
-              }
-              placeholder="Überschrift..."
-              className={`w-full text-xl font-bold bg-transparent border-none focus:ring-0 px-0 text-${block.align} ${block.font || 'font-sans'} ${block.italic ? 'italic' : ''}`}
-            />
+            </>
           )}
-          {block.type === "text" && (
+
+          {["header", "text", "quote"].includes(block.type) && (
+            <>
+              <div className="w-px h-4 bg-slate-200 mx-1"></div>
+              <div className="flex bg-slate-50 rounded border p-0.5">
+                <button
+                  onClick={() => updateBlock(block.id, { align: "left" })}
+                  className={`p-1 rounded ${
+                    block.align === "left"
+                      ? "bg-white shadow text-black"
+                      : "text-slate-400"
+                  }`}
+                >
+                  <AlignLeft size={12} />
+                </button>
+                <button
+                  onClick={() => updateBlock(block.id, { align: "center" })}
+                  className={`p-1 rounded ${
+                    block.align === "center"
+                      ? "bg-white shadow text-black"
+                      : "text-slate-400"
+                  }`}
+                >
+                  <AlignCenter size={12} />
+                </button>
+                <button
+                  onClick={() => updateBlock(block.id, { align: "right" })}
+                  className={`p-1 rounded ${
+                    block.align === "right"
+                      ? "bg-white shadow text-black"
+                      : "text-slate-400"
+                  }`}
+                >
+                  <AlignRight size={12} />
+                </button>
+              </div>
+            </>
+          )}
+
+          {block.type === "image" && (
+            <div className="flex bg-slate-50 rounded border p-0.5 ml-2">
+              <button
+                onClick={() => updateBlock(block.id, { layout: "left" })}
+                className={`p-1 rounded ${
+                  block.layout === "left"
+                    ? "bg-white shadow text-indigo-600"
+                    : "text-slate-400"
+                }`}
+                title="Bild Links + Text"
+              >
+                <PanelLeft size={12} />
+              </button>
+              <button
+                onClick={() => updateBlock(block.id, { layout: "center" })}
+                className={`p-1 rounded ${
+                  block.layout === "center"
+                    ? "bg-white shadow text-indigo-600"
+                    : "text-slate-400"
+                }`}
+              >
+                <BoxSelect size={12} />
+              </button>
+              <button
+                onClick={() => updateBlock(block.id, { layout: "right" })}
+                className={`p-1 rounded ${
+                  block.layout === "right"
+                    ? "bg-white shadow text-indigo-600"
+                    : "text-slate-400"
+                }`}
+                title="Bild Rechts + Text"
+              >
+                <PanelRight size={12} />
+              </button>
+              <button
+                onClick={() => updateBlock(block.id, { layout: "full" })}
+                className={`p-1 rounded ${
+                  block.layout === "full"
+                    ? "bg-white shadow text-indigo-600"
+                    : "text-slate-400"
+                }`}
+              >
+                <Maximize size={12} />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {block.type === "header" && (
+          <LazyInput
+            value={block.content || ""}
+            onChange={(e) => updateBlock(block.id, { content: e.target.value })}
+            placeholder="Überschrift..."
+            className={`w-full text-xl font-bold bg-transparent border-none focus:ring-0 px-0 text-${
+              block.align
+            } ${block.font || "font-sans"} ${block.italic ? "italic" : ""}`}
+          />
+        )}
+        {block.type === "text" && (
+          <LazyTextarea
+            value={block.content || ""}
+            onChange={(e) => updateBlock(block.id, { content: e.target.value })}
+            placeholder="Erzähl die Story..."
+            className={`w-full min-h-[80px] bg-transparent border-none focus:ring-0 resize-none px-0 text-${
+              block.align
+            } ${block.font || "font-sans"} ${block.italic ? "italic" : ""} ${
+              block.bold ? "font-bold" : ""
+            }`}
+          />
+        )}
+        {block.type === "quote" && (
+          <div className="bg-slate-50 p-4 rounded border-l-4 border-indigo-200">
             <LazyTextarea
               value={block.content || ""}
               onChange={(e) =>
                 updateBlock(block.id, { content: e.target.value })
               }
-              placeholder="Erzähl die Story..."
-              className={`w-full min-h-[80px] bg-transparent border-none focus:ring-0 resize-none px-0 text-${block.align} ${block.font || 'font-sans'} ${block.italic ? 'italic' : ''} ${block.bold ? 'font-bold' : ''}`}
+              placeholder="Insider / Zitat..."
+              className={`w-full bg-transparent text-lg border-none focus:ring-0 text-center ${
+                block.font || "font-serif"
+              } ${block.italic ? "italic" : ""} ${
+                block.bold ? "font-bold" : ""
+              }`}
             />
-          )}
-          {block.type === "quote" && (
-            <div className="bg-slate-50 p-4 rounded border-l-4 border-indigo-200">
-              <LazyTextarea
-                value={block.content || ""}
-                onChange={(e) =>
-                  updateBlock(block.id, { content: e.target.value })
-                }
-                placeholder="Insider / Zitat..."
-                className={`w-full bg-transparent text-lg border-none focus:ring-0 text-center ${block.font || 'font-serif'} ${block.italic ? 'italic' : ''} ${block.bold ? 'font-bold' : ''}`}
-              />
-            </div>
-          )}
-          {block.type === "divider" && (
-            <div className="flex justify-center text-slate-300 py-2">
-              <Minus /> ● <Minus />
-            </div>
-          )}
-          {block.type === "note" && (
-            <div className="bg-amber-50 p-3 rounded border border-amber-100">
-              <LazyTextarea
-                value={block.content || ""}
-                onChange={(e) =>
-                  updateBlock(block.id, { content: e.target.value })
-                }
-                placeholder="Randnotiz..."
-                className={`w-full bg-transparent text-amber-900 border-none focus:ring-0 text-sm ${block.font || 'font-sans'} ${block.italic ? 'italic' : ''} ${block.bold ? 'font-bold' : ''}`}
-              />
-            </div>
-          )}
+          </div>
+        )}
+        {block.type === "divider" && (
+          <div className="flex justify-center text-slate-300 py-2">
+            <Minus /> ● <Minus />
+          </div>
+        )}
+        {block.type === "note" && (
+          <div className="bg-amber-50 p-3 rounded border border-amber-100">
+            <LazyTextarea
+              value={block.content || ""}
+              onChange={(e) =>
+                updateBlock(block.id, { content: e.target.value })
+              }
+              placeholder="Randnotiz..."
+              className={`w-full bg-transparent text-amber-900 border-none focus:ring-0 text-sm ${
+                block.font || "font-sans"
+              } ${block.italic ? "italic" : ""} ${
+                block.bold ? "font-bold" : ""
+              }`}
+            />
+          </div>
+        )}
 
-          {block.type === "image" && (
-            <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">
-                Bild
-              </label>
+        {block.type === "image" && (
+          <div>
+            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">
+              Bild
+            </label>
+            <ImageSelector
+              current={block.content}
+              onSelect={(img) => updateBlock(block.id, { content: img })}
+              uploadedImages={uploadedImages}
+            />
+            {block.content && (
+              <div className="flex flex-col gap-2 mt-2 bg-slate-50 p-2 rounded">
+                <DraggableImage
+                  src={block.content}
+                  position={block.focus || "50% 50%"}
+                  onPositionChange={(pos) =>
+                    updateBlock(block.id, { focus: pos })
+                  }
+                  className="h-48 w-full rounded border border-slate-200"
+                />
+
+                {(block.layout === "left" || block.layout === "right") && (
+                  <div className="mt-2 border-t pt-2 border-slate-100">
+                    <label className="text-[10px] text-slate-400 font-bold uppercase mb-1 block">
+                      Text daneben (mittig)
+                    </label>
+                    <LazyTextarea
+                      value={block.sideText || ""}
+                      onChange={(e) =>
+                        updateBlock(block.id, { sideText: e.target.value })
+                      }
+                      placeholder="Schreib etwas zum Bild..."
+                      className={`w-full text-sm bg-white border border-slate-200 rounded p-2 focus:ring-1 focus:ring-indigo-200 min-h-[60px] ${
+                        block.font || "font-sans"
+                      } ${block.italic ? "italic" : ""} ${
+                        block.bold ? "font-bold" : ""
+                      }`}
+                    />
+                  </div>
+                )}
+
+                <LazyInput
+                  value={block.caption || ""}
+                  onChange={(e) =>
+                    updateBlock(block.id, { caption: e.target.value })
+                  }
+                  placeholder="Bildunterschrift (unten)..."
+                  className="text-xs bg-white border p-2 rounded w-full mt-1"
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {block.type === "image-pair" && (
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-3 border rounded-lg bg-slate-50">
+              <span className="text-[10px] text-slate-400 block mb-2 font-bold">
+                Links
+              </span>
               <ImageSelector
                 current={block.content}
                 onSelect={(img) => updateBlock(block.id, { content: img })}
                 uploadedImages={uploadedImages}
               />
-              {block.content && (
-                <div className="flex flex-col gap-2 mt-2 bg-slate-50 p-2 rounded">
+              {block.content ? (
+                <div className="mt-2">
                   <DraggableImage
                     src={block.content}
                     position={block.focus || "50% 50%"}
                     onPositionChange={(pos) =>
                       updateBlock(block.id, { focus: pos })
                     }
-                    className="h-48 w-full rounded border border-slate-200"
+                    className="h-32 w-full rounded border border-slate-200"
                   />
-                  
-                  {(block.layout === 'left' || block.layout === 'right') && (
-                      <div className="mt-2 border-t pt-2 border-slate-100">
-                          <label className="text-[10px] text-slate-400 font-bold uppercase mb-1 block">Text daneben (mittig)</label>
-                          <LazyTextarea
-                             value={block.sideText || ''}
-                             onChange={(e) => updateBlock(block.id, { sideText: e.target.value })}
-                             placeholder="Schreib etwas zum Bild..."
-                             className={`w-full text-sm bg-white border border-slate-200 rounded p-2 focus:ring-1 focus:ring-indigo-200 min-h-[60px] ${block.font || 'font-sans'} ${block.italic ? 'italic' : ''} ${block.bold ? 'font-bold' : ''}`}
-                          />
-                      </div>
-                  )}
-
-                  <LazyInput
-                    value={block.caption || ""}
-                    onChange={(e) =>
-                      updateBlock(block.id, { caption: e.target.value })
-                    }
-                    placeholder="Bildunterschrift (unten)..."
-                    className="text-xs bg-white border p-2 rounded w-full mt-1"
-                  />
+                </div>
+              ) : (
+                <div className="h-32 flex items-center justify-center border-dashed border-2 rounded text-slate-300">
+                  <ImageIcon />
                 </div>
               )}
             </div>
-          )}
-
-          {block.type === "image-pair" && (
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-3 border rounded-lg bg-slate-50">
-                <span className="text-[10px] text-slate-400 block mb-2 font-bold">
-                  Links
-                </span>
-                <ImageSelector
-                  current={block.content}
-                  onSelect={(img) => updateBlock(block.id, { content: img })}
-                  uploadedImages={uploadedImages}
-                />
-                {block.content ? (
-                  <div className="mt-2">
-                    <DraggableImage
-                      src={block.content}
-                      position={block.focus || "50% 50%"}
-                      onPositionChange={(pos) =>
-                        updateBlock(block.id, { focus: pos })
-                      }
-                      className="h-32 w-full rounded border border-slate-200"
-                    />
-                  </div>
-                ) : (
-                  <div className="h-32 flex items-center justify-center border-dashed border-2 rounded text-slate-300">
-                    <ImageIcon />
-                  </div>
-                )}
-              </div>
-              <div className="p-3 border rounded-lg bg-slate-50">
-                <span className="text-[10px] text-slate-400 block mb-2 font-bold">
-                  Rechts
-                </span>
-                <ImageSelector
-                  current={block.content2}
-                  onSelect={(img) => updateBlock(block.id, { content2: img })}
-                  uploadedImages={uploadedImages}
-                />
-                {block.content2 ? (
-                  <div className="mt-2">
-                    <DraggableImage
-                      src={block.content2}
-                      position={block.focus2 || "50% 50%"}
-                      onPositionChange={(pos) =>
-                        updateBlock(block.id, { focus2: pos })
-                      }
-                      className="h-32 w-full rounded border border-slate-200"
-                    />
-                  </div>
-                ) : (
-                  <div className="h-32 flex items-center justify-center border-dashed border-2 rounded text-slate-300">
-                    <ImageIcon />
-                  </div>
-                )}
-              </div>
+            <div className="p-3 border rounded-lg bg-slate-50">
+              <span className="text-[10px] text-slate-400 block mb-2 font-bold">
+                Rechts
+              </span>
+              <ImageSelector
+                current={block.content2}
+                onSelect={(img) => updateBlock(block.id, { content2: img })}
+                uploadedImages={uploadedImages}
+              />
+              {block.content2 ? (
+                <div className="mt-2">
+                  <DraggableImage
+                    src={block.content2}
+                    position={block.focus2 || "50% 50%"}
+                    onPositionChange={(pos) =>
+                      updateBlock(block.id, { focus2: pos })
+                    }
+                    className="h-32 w-full rounded border border-slate-200"
+                  />
+                </div>
+              ) : (
+                <div className="h-32 flex items-center justify-center border-dashed border-2 rounded text-slate-300">
+                  <ImageIcon />
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
+      </div>
     );
-}, (prev, next) => {
+  },
+  (prev, next) => {
     return (
-        prev.block === next.block && 
-        prev.index === next.index &&
-        prev.total === next.total &&
-        prev.uploadedImages === next.uploadedImages
+      prev.block === next.block &&
+      prev.index === next.index &&
+      prev.total === next.total &&
+      prev.uploadedImages === next.uploadedImages
     );
-});
+  }
+);
 
 const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
   const addBlock = (type) =>
@@ -801,9 +888,9 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
         imgStyle: "rounded",
         focus: "50% 50%",
         focus2: "50% 50%",
-        font: "font-sans", 
+        font: "font-sans",
         italic: false,
-        bold: false
+        bold: false,
       },
     ]);
   const updateBlock = (id, upd) =>
@@ -822,15 +909,15 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
   return (
     <div className="space-y-4">
       {blocks.map((block, i) => (
-        <BlockItem 
-            key={block.id}
-            block={block}
-            index={i}
-            total={blocks.length}
-            updateBlock={updateBlock}
-            removeBlock={removeBlock}
-            moveBlock={moveBlock}
-            uploadedImages={uploadedImages}
+        <BlockItem
+          key={block.id}
+          block={block}
+          index={i}
+          total={blocks.length}
+          updateBlock={updateBlock}
+          removeBlock={removeBlock}
+          moveBlock={moveBlock}
+          uploadedImages={uploadedImages}
         />
       ))}
 
@@ -893,28 +980,49 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
 
 const ImageManager = ({ images, onChange, coverImage, onSetCover }) => {
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(""); // NEU: Fortschrittsanzeige
   const fileInput = useRef(null);
 
   const handleFiles = async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
+
     setLoading(true);
     const newImgs = [];
-    for (const f of files) {
-      const data = await compressImage(f, 1600, 0.8);
-      // New images have no ID yet
-      newImgs.push({ id: null, url: data });
+
+    // Änderung: Normale Schleife mit Pause für den Browser
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+
+      // Fortschritt anzeigen
+      setProgress(`${i + 1} von ${files.length}`);
+
+      // WICHTIG: 20ms Pause, damit der Browser nicht einfriert
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      try {
+        const data = await compressImage(f, 1600, 0.8);
+        newImgs.push({ id: null, url: data });
+      } catch (err) {
+        console.error("Fehler beim Bild:", f.name, err);
+      }
     }
+
     onChange([...images, ...newImgs]);
     setLoading(false);
+    setProgress("");
     fileInput.current.value = "";
   };
 
   return (
     <div className="space-y-4">
       <div
-        onClick={() => fileInput.current?.click()}
-        className="border-2 border-dashed border-slate-300 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500 hover:bg-indigo-50 transition-colors"
+        onClick={() => !loading && fileInput.current?.click()}
+        className={`border-2 border-dashed border-slate-300 rounded-xl p-6 flex flex-col items-center justify-center transition-colors ${
+          loading
+            ? "cursor-wait opacity-70"
+            : "cursor-pointer hover:border-indigo-500 hover:bg-indigo-50"
+        }`}
       >
         <input
           type="file"
@@ -923,33 +1031,48 @@ const ImageManager = ({ images, onChange, coverImage, onSetCover }) => {
           className="hidden"
           ref={fileInput}
           onChange={handleFiles}
+          disabled={loading}
         />
         {loading ? (
-          <Loader2 className="animate-spin text-indigo-500 mb-2" />
+          <div className="flex flex-col items-center">
+            <Loader2 className="animate-spin text-indigo-500 mb-2" />
+            <span className="text-xs font-bold text-indigo-600 animate-pulse">
+              Verarbeite Bild {progress}...
+            </span>
+            <span className="text-[10px] text-slate-400 mt-1">
+              Bitte warten...
+            </span>
+          </div>
         ) : (
-          <Upload className="text-slate-400 mb-2" />
+          <>
+            <Upload className="text-slate-400 mb-2" />
+            <span className="text-sm font-medium text-slate-600">
+              Fotos hochladen (High Quality)
+            </span>
+          </>
         )}
-        <span className="text-sm font-medium text-slate-600">
-          {loading ? "Verarbeite..." : "Fotos hochladen (High Quality)"}
-        </span>
       </div>
       <div className="grid grid-cols-3 gap-2">
         {images.map((img, i) => (
           <div
             key={i}
             className={`relative group aspect-square rounded-lg overflow-hidden border-2 transition-all ${
-              (typeof img === 'object' ? img.url : img) === coverImage
+              (typeof img === "object" ? img.url : img) === coverImage
                 ? "border-amber-400 ring-2 ring-amber-100"
                 : "border-transparent bg-slate-100"
             }`}
           >
-            <img src={typeof img === 'object' ? img.url : img} className="w-full h-full object-cover" />
+            <img
+              src={typeof img === "object" ? img.url : img}
+              className="w-full h-full object-cover"
+            />
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors">
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   onChange(images.filter((_, idx) => idx !== i));
-                  if (coverImage === (typeof img === 'object' ? img.url : img)) onSetCover(null);
+                  if (coverImage === (typeof img === "object" ? img.url : img))
+                    onSetCover(null);
                 }}
                 className="absolute top-1 right-1 bg-white p-1 rounded-full shadow opacity-0 group-hover:opacity-100 hover:text-red-500"
                 title="Löschen"
@@ -958,9 +1081,11 @@ const ImageManager = ({ images, onChange, coverImage, onSetCover }) => {
               </button>
 
               <button
-                onClick={() => onSetCover(typeof img === 'object' ? img.url : img)}
+                onClick={() =>
+                  onSetCover(typeof img === "object" ? img.url : img)
+                }
                 className={`absolute bottom-1 right-1 p-1.5 rounded-full shadow transition-all ${
-                  (typeof img === 'object' ? img.url : img) === coverImage
+                  (typeof img === "object" ? img.url : img) === coverImage
                     ? "bg-amber-400 text-white opacity-100"
                     : "bg-white text-slate-400 opacity-0 group-hover:opacity-100 hover:text-amber-400"
                 }`}
@@ -968,7 +1093,11 @@ const ImageManager = ({ images, onChange, coverImage, onSetCover }) => {
               >
                 <Star
                   size={12}
-                  fill={(typeof img === 'object' ? img.url : img) === coverImage ? "currentColor" : "none"}
+                  fill={
+                    (typeof img === "object" ? img.url : img) === coverImage
+                      ? "currentColor"
+                      : "none"
+                  }
                 />
               </button>
             </div>
@@ -1003,7 +1132,8 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
       imgStyle += "rounded-2xl shadow-md w-full"; // Breite wird vom Wrapper gesteuert
     } else if (layout === "right") {
       // FIX: Flex-Layout für Rechts (Reverse)
-      classes += "flex flex-col md:flex-row-reverse items-center gap-8 clear-both";
+      classes +=
+        "flex flex-col md:flex-row-reverse items-center gap-8 clear-both";
       imgStyle += "rounded-2xl shadow-md w-full";
     } else {
       classes += "w-full block clear-both";
@@ -1021,10 +1151,10 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
         <div
           key={b.id}
           className={`${getAnim(b.animation)} ${
-            ["header", "quote", "divider"].includes(b.type)
-              ? "clear-both"
-              : ""
-          } text-${b.align || "left"} ${b.font || 'font-sans'} ${b.italic ? 'italic' : ''} ${b.bold ? 'font-bold' : ''}`}
+            ["header", "quote", "divider"].includes(b.type) ? "clear-both" : ""
+          } text-${b.align || "left"} ${b.font || "font-sans"} ${
+            b.italic ? "italic" : ""
+          } ${b.bold ? "font-bold" : ""}`}
         >
           {b.type === "header" && (
             <h3
@@ -1080,35 +1210,49 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
                 b.imgStyle
               );
               // Check if we use the new Flex layout (Left/Right)
-              const isSideLayout = b.layout === 'left' || b.layout === 'right';
-               
-              return (
-                <div className={isSideLayout ? classes : `my-6 relative ${classes}`}>
-                    {/* BILD CONTAINER */}
-                    <div className={isSideLayout ? "w-full md:w-1/2" : "w-full"}>
-                      <figure>
-                        <img
-                          src={b.content}
-                          className={imgStyle}
-                          style={{ objectPosition: b.focus || "50% 50%" }}
-                          onError={(e) => (e.target.style.display = "none")}
-                        />
-                        {b.caption && (
-                          <figcaption className="text-center text-xs text-slate-500 mt-2 italic">
-                            {b.caption}
-                          </figcaption>
-                        )}
-                      </figure>
-                    </div>
+              const isSideLayout = b.layout === "left" || b.layout === "right";
 
-                    {/* SIDE TEXT CONTAINER (nur bei Side Layout und wenn Text existiert) */}
-                    {isSideLayout && (
-                        <div className="w-full md:w-1/2 flex items-center justify-center p-4">
-                              <div className={`text-lg leading-relaxed whitespace-pre-wrap ${b.font || 'font-sans'} ${b.italic ? 'italic' : ''} ${b.bold ? 'font-bold' : ''} ${theme === 'cinema' ? 'text-slate-300' : 'text-slate-700'}`}>
-                                {b.sideText}
-                            </div>
-                        </div>
-                    )}
+              return (
+                <div
+                  className={
+                    isSideLayout ? classes : `my-6 relative ${classes}`
+                  }
+                >
+                  {/* BILD CONTAINER */}
+                  <div className={isSideLayout ? "w-full md:w-1/2" : "w-full"}>
+                    <figure>
+                      <img
+                        src={b.content}
+                        className={imgStyle}
+                        style={{ objectPosition: b.focus || "50% 50%" }}
+                        onError={(e) => (e.target.style.display = "none")}
+                      />
+                      {b.caption && (
+                        <figcaption className="text-center text-xs text-slate-500 mt-2 italic">
+                          {b.caption}
+                        </figcaption>
+                      )}
+                    </figure>
+                  </div>
+
+                  {/* SIDE TEXT CONTAINER (nur bei Side Layout und wenn Text existiert) */}
+                  {isSideLayout && (
+                    <div className="w-full md:w-1/2 flex items-center justify-center p-4">
+                      <div
+                        className={`text-lg leading-relaxed whitespace-pre-wrap ${
+                          b.font || "font-sans"
+                        } ${b.italic ? "italic" : ""} ${
+                          b.bold ? "font-bold" : ""
+                        } ${
+                          theme === "cinema"
+                            ? "text-slate-300"
+                            : "text-slate-700"
+                        }`}
+                      >
+                        {b.sideText}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })()}
@@ -1200,29 +1344,33 @@ const MemoryCard = ({ memory, onClick }) => {
   const { title, author, date, endDate, theme, location, blocks } = memory;
   const images = memory.images || [];
   // Use cover image if available, else first image
-  const previewImage = memory.coverImage || memory.previewImage || (images.length > 0 ? images[0] : "");
+  const previewImage =
+    memory.coverImage ||
+    memory.previewImage ||
+    (images.length > 0 ? images[0] : "");
 
   // Extract text for preview
   const getPreviewText = () => {
-      if (!blocks) return "";
-      const hydrated = hydrateBlocks(blocks, images);
-      const textBlock = hydrated.find(
-        (b) =>
-          ((b.type === "text" || b.type === "quote" || b.type === "note") &&
+    if (!blocks) return "";
+    const hydrated = hydrateBlocks(blocks, images);
+    const textBlock = hydrated.find(
+      (b) =>
+        ((b.type === "text" || b.type === "quote" || b.type === "note") &&
           b.content &&
-          b.content.trim().length > 0) || (b.sideText && b.sideText.trim().length > 0)
-      );
-      return textBlock ? (textBlock.content || textBlock.sideText) : "";
+          b.content.trim().length > 0) ||
+        (b.sideText && b.sideText.trim().length > 0)
+    );
+    return textBlock ? textBlock.content || textBlock.sideText : "";
   };
   const previewText = getPreviewText();
 
   const renderDate = () => {
-      const start = formatDateSafe(date);
-      if (endDate) {
-          const end = formatDateSafe(endDate);
-          return `${start} – ${end}`;
-      }
-      return start;
+    const start = formatDateSafe(date);
+    if (endDate) {
+      const end = formatDateSafe(endDate);
+      return `${start} – ${end}`;
+    }
+    return start;
   };
 
   const Container = ({ children, className }) => (
@@ -1398,12 +1546,12 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
   };
 
   const renderDate = () => {
-      const start = formatDateSafe(memory.date);
-      if (memory.endDate) {
-          const end = formatDateSafe(memory.endDate);
-          return `${start} – ${end}`;
-      }
-      return start;
+    const start = formatDateSafe(memory.date);
+    if (memory.endDate) {
+      const end = formatDateSafe(memory.endDate);
+      return `${start} – ${end}`;
+    }
+    return start;
   };
 
   if (loadingImages)
@@ -1584,8 +1732,7 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
                         : "opacity-80 hover:opacity-100"
                     }`}
                     style={{
-                      borderColor:
-                        activeImg === i ? accent.hex : "transparent",
+                      borderColor: activeImg === i ? accent.hex : "transparent",
                       "--tw-ring-color": accent.hex,
                     }}
                   >
@@ -1630,7 +1777,7 @@ export default function App() {
     blocks: [],
     date: new Date().toISOString().split("T")[0],
     endDate: "", // Neues Feld für Enddatum
-    coverImage: "", 
+    coverImage: "",
   });
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -1724,27 +1871,27 @@ export default function App() {
 
     // Refactored hydration logic to handle object mapping (ID <-> Data)
     if (imgs.length > 0) {
-       // Assuming memory.images contains IDs. 
-       // Fetch valid IDs.
-       const assets = await fetchAssets(imgs);
-       
-       // Map original ID to asset data
-       imgs.forEach((id, index) => {
-           // We only add it if we successfully fetched data or it's a legacy data string
-           const data = assets[index];
-           if (data) {
-              editableImages.push({ id: id, url: data });
-           } else if (id.startsWith("data:")) {
-              // Legacy support for direct data strings in image array
-              editableImages.push({ id: null, url: id });
-           }
-       });
+      // Assuming memory.images contains IDs.
+      // Fetch valid IDs.
+      const assets = await fetchAssets(imgs);
+
+      // Map original ID to asset data
+      imgs.forEach((id, index) => {
+        // We only add it if we successfully fetched data or it's a legacy data string
+        const data = assets[index];
+        if (data) {
+          editableImages.push({ id: id, url: data });
+        } else if (id.startsWith("data:")) {
+          // Legacy support for direct data strings in image array
+          editableImages.push({ id: null, url: id });
+        }
+      });
     }
 
     const editableBlocks = memory.blocks
       ? hydrateBlocks(memory.blocks, editableImages)
       : [{ id: 1, type: "text", content: memory.content || "" }];
-     
+
     const data = {
       ...memory,
       images: editableImages, // Now contains { id, url } objects
@@ -1752,7 +1899,11 @@ export default function App() {
       date: memory.date?.toDate
         ? memory.date.toDate().toISOString().split("T")[0]
         : memory.date,
-      endDate: memory.endDate ? (memory.endDate.toDate ? memory.endDate.toDate().toISOString().split("T")[0] : memory.endDate) : "",
+      endDate: memory.endDate
+        ? memory.endDate.toDate
+          ? memory.endDate.toDate().toISOString().split("T")[0]
+          : memory.endDate
+        : "",
       coverImage: memory.coverImage || "",
     };
 
@@ -1764,24 +1915,28 @@ export default function App() {
 
   // Guard for leaving editor
   const handleExitEditor = () => {
-      if (editingId && hasChanges) {
-          if (window.confirm("Du hast ungespeicherte Änderungen. Wirklich verlassen?")) {
-              setView("home");
-          }
-      } else {
-          setView("home");
+    if (editingId && hasChanges) {
+      if (
+        window.confirm("Du hast ungespeicherte Änderungen. Wirklich verlassen?")
+      ) {
+        setView("home");
       }
+    } else {
+      setView("home");
+    }
   };
 
   // REF TO ACCESS LATEST STATE IN ASYNC FUNCTIONS
   const formDataRef = useRef(formData);
-  useEffect(() => { formDataRef.current = formData; }, [formData]);
+  useEffect(() => {
+    formDataRef.current = formData;
+  }, [formData]);
 
   const handleSave = async () => {
     // WAIT FOR ONBLUR EVENTS TO PROPAGATE
     // This fixes the race condition where the last typed character isn't saved yet
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
     // READ FROM REF TO GET LATEST STATE
     const currentData = formDataRef.current;
 
@@ -1789,51 +1944,57 @@ export default function App() {
     setIsSaving(true);
     try {
       // Logic for Cover Image (Source)
-      const firstImage = currentData.images.length > 0 ? (currentData.images[0].url || currentData.images[0]) : null;
+      const firstImage =
+        currentData.images.length > 0
+          ? currentData.images[0].url || currentData.images[0]
+          : null;
       const sourceImage = currentData.coverImage || firstImage;
-      
+
       let previewImage = "";
       if (sourceImage && sourceImage.startsWith("data:")) {
         const blob = await fetch(sourceImage).then((r) => r.blob());
         previewImage = await compressImage(blob, 800, 0.7);
       } else {
-          previewImage = sourceImage;
+        previewImage = sourceImage;
       }
 
       const imageIds = [];
       // Improved loop to reuse existing IDs and only upload new images
       for (const imgObj of currentData.images) {
         // Check if we have an existing ID (from editing) or it's a new upload (object with null id) or legacy string
-        const isObj = typeof imgObj === 'object';
+        const isObj = typeof imgObj === "object";
         const existingId = isObj ? imgObj.id : null; // If string, no ID
         const dataUrl = isObj ? imgObj.url : imgObj;
 
         if (existingId) {
-            // Already uploaded, reuse ID
-            imageIds.push(existingId);
+          // Already uploaded, reuse ID
+          imageIds.push(existingId);
         } else if (dataUrl && dataUrl.startsWith("data:")) {
-            // New upload required
-             const assetDoc = await addDoc(
-                collection(
-                  db,
-                  "artifacts",
-                  appId,
-                  "public",
-                  "data",
-                  "memory_assets"
-                ),
-                { imageData: dataUrl, createdAt: serverTimestamp() }
-              );
-              imageIds.push(assetDoc.id);
+          // New upload required
+          const assetDoc = await addDoc(
+            collection(
+              db,
+              "artifacts",
+              appId,
+              "public",
+              "data",
+              "memory_assets"
+            ),
+            { imageData: dataUrl, createdAt: serverTimestamp() }
+          );
+          imageIds.push(assetDoc.id);
         } else {
-            // Should not happen, but safe fallback (maybe external URL)
-            // If it's not data URI and no ID, maybe we shouldn't save it or it's a raw URL?
-            // For now, ignore unless it looks like a valid ID string, but we can't tell easily.
+          // Should not happen, but safe fallback (maybe external URL)
+          // If it's not data URI and no ID, maybe we shouldn't save it or it's a raw URL?
+          // For now, ignore unless it looks like a valid ID string, but we can't tell easily.
         }
       }
 
-      const savedBlocks = dehydrateBlocks(currentData.blocks, currentData.images);
-      
+      const savedBlocks = dehydrateBlocks(
+        currentData.blocks,
+        currentData.images
+      );
+
       const payload = {
         title: currentData.title,
         location: currentData.location,
@@ -1869,9 +2030,9 @@ export default function App() {
       setIsSaving(false);
     }
   };
-   
+
   const triggerDelete = () => {
-      setShowDeleteConfirm(true);
+    setShowDeleteConfirm(true);
   };
 
   const confirmDelete = async () => {
@@ -1933,47 +2094,56 @@ export default function App() {
             <Button variant="ghost" onClick={handleExitEditor}>
               <ChevronLeft />
             </Button>
-            <h2 className="font-bold">{editingId ? 'Eintrag bearbeiten' : 'Neuer Eintrag'}</h2>
+            <h2 className="font-bold">
+              {editingId ? "Eintrag bearbeiten" : "Neuer Eintrag"}
+            </h2>
           </div>
           <div className="flex gap-3 items-center">
             <div className="text-xs text-slate-400 mr-2 flex items-center gap-1">
               <Database size={12} /> Bilder werden extern gespeichert
             </div>
-            {editingId && (
-                showDeleteConfirm ? (
-                    <div className="flex items-center gap-2 bg-red-50 p-1 rounded-lg border border-red-100 animate-in fade-in slide-in-from-right-4">
-                        <span className="text-xs text-red-600 font-bold ml-2">Wirklich?</span>
-                        <button 
-                            onClick={confirmDelete} 
-                            disabled={isDeleting}
-                            className="bg-red-500 text-white p-1.5 rounded hover:bg-red-600 transition-colors"
-                        >
-                            {isDeleting ? <Loader2 size={14} className="animate-spin"/> : <CheckCircle size={14} />}
-                        </button>
-                        <button 
-                            onClick={() => setShowDeleteConfirm(false)}
-                            className="bg-white text-slate-500 p-1.5 rounded border hover:bg-slate-50 transition-colors"
-                        >
-                            <XCircle size={14} />
-                        </button>
-                    </div>
-                ) : (
-                    <Button variant="danger" onClick={triggerDelete}>
-                        <Trash2 size={16} />
-                    </Button>
-                )
-            )}
-            <Button 
-                variant="primary" 
-                onClick={handleSave} 
-                disabled={isSaving || (editingId && !hasChanges)}
+            {editingId &&
+              (showDeleteConfirm ? (
+                <div className="flex items-center gap-2 bg-red-50 p-1 rounded-lg border border-red-100 animate-in fade-in slide-in-from-right-4">
+                  <span className="text-xs text-red-600 font-bold ml-2">
+                    Wirklich?
+                  </span>
+                  <button
+                    onClick={confirmDelete}
+                    disabled={isDeleting}
+                    className="bg-red-500 text-white p-1.5 rounded hover:bg-red-600 transition-colors"
+                  >
+                    {isDeleting ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <CheckCircle size={14} />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setShowDeleteConfirm(false)}
+                    className="bg-white text-slate-500 p-1.5 rounded border hover:bg-slate-50 transition-colors"
+                  >
+                    <XCircle size={14} />
+                  </button>
+                </div>
+              ) : (
+                <Button variant="danger" onClick={triggerDelete}>
+                  <Trash2 size={16} />
+                </Button>
+              ))}
+            <Button
+              variant="primary"
+              onClick={handleSave}
+              disabled={isSaving || (editingId && !hasChanges)}
             >
               {isSaving ? (
                 <>
                   <Loader2 className="animate-spin mr-2" /> Speichere...
                 </>
+              ) : editingId ? (
+                "Änderungen speichern"
               ) : (
-                editingId ? "Änderungen speichern" : "Veröffentlichen"
+                "Veröffentlichen"
               )}
             </Button>
           </div>
@@ -1989,54 +2159,61 @@ export default function App() {
                     setFormData({ ...formData, title: e.target.value })
                   }
                 />
-                 {/* NEUES DATUMS-HANDLING MIT ZEITRAUM */}
-                 <div className="mb-4 w-full">
-                    <div className="flex items-center justify-between mb-2">
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
-                            {formData.endDate ? 'Zeitraum' : 'Datum'}
-                        </label>
-                        <label className="flex items-center gap-2 text-xs font-medium text-slate-400 cursor-pointer hover:text-indigo-600">
-                             <input 
-                                type="checkbox" 
-                                className="accent-indigo-600 rounded"
-                                checked={!!formData.endDate}
-                                onChange={(e) => {
-                                    setFormData({
-                                        ...formData,
-                                        endDate: e.target.checked ? formData.date : "" 
-                                    })
-                                }}
-                             />
-                             Zeitraum?
-                        </label>
+                {/* NEUES DATUMS-HANDLING MIT ZEITRAUM */}
+                <div className="mb-4 w-full">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                      {formData.endDate ? "Zeitraum" : "Datum"}
+                    </label>
+                    <label className="flex items-center gap-2 text-xs font-medium text-slate-400 cursor-pointer hover:text-indigo-600">
+                      <input
+                        type="checkbox"
+                        className="accent-indigo-600 rounded"
+                        checked={!!formData.endDate}
+                        onChange={(e) => {
+                          setFormData({
+                            ...formData,
+                            endDate: e.target.checked ? formData.date : "",
+                          });
+                        }}
+                      />
+                      Zeitraum?
+                    </label>
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <input
+                        type="date"
+                        value={formData.date}
+                        onChange={(e) =>
+                          setFormData({ ...formData, date: e.target.value })
+                        }
+                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all text-slate-700"
+                      />
                     </div>
-                    <div className="flex gap-2">
-                         <div className="flex-1">
-                             <input
-                                type="date"
-                                value={formData.date}
-                                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all text-slate-700"
-                             />
-                         </div>
-                         {formData.endDate && (
-                             <>
-                                <div className="flex items-center text-slate-400">
-                                    <ArrowRightIcon size={16} />
-                                </div>
-                                <div className="flex-1">
-                                    <input
-                                        type="date"
-                                        value={formData.endDate}
-                                        min={formData.date}
-                                        onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all text-slate-700"
-                                    />
-                                </div>
-                             </>
-                         )}
-                    </div>
-                 </div>
+                    {formData.endDate && (
+                      <>
+                        <div className="flex items-center text-slate-400">
+                          <ArrowRightIcon size={16} />
+                        </div>
+                        <div className="flex-1">
+                          <input
+                            type="date"
+                            value={formData.endDate}
+                            min={formData.date}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                endDate: e.target.value,
+                              })
+                            }
+                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all text-slate-700"
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
               <Input
                 label="Ort"
@@ -2058,7 +2235,9 @@ export default function App() {
                 images={formData.images}
                 onChange={(i) => setFormData({ ...formData, images: i })}
                 coverImage={formData.coverImage}
-                onSetCover={(img) => setFormData({ ...formData, coverImage: img })}
+                onSetCover={(img) =>
+                  setFormData({ ...formData, coverImage: img })
+                }
               />
             </section>
           </div>
@@ -2068,10 +2247,101 @@ export default function App() {
                 <Palette size={14} /> Design
               </h3>
               <div className="space-y-6">
-                <div><label className="block text-xs font-bold text-slate-500 mb-2">Akzentfarbe</label><div className="flex gap-2 flex-wrap">{ACCENT_COLORS.map((c) => <button key={c.id} onClick={() => setFormData({ ...formData, accentColor: c.id })} className={`w-8 h-8 rounded-full transition-all ${formData.accentColor === c.id ? "ring-2 ring-offset-2 ring-slate-400 scale-110" : "hover:scale-105"}`} style={{ backgroundColor: c.hex }} title={c.name} />)}</div></div>
-                <div><label className="block text-xs font-bold text-slate-500 mb-2">Hintergrund</label><div className="grid grid-cols-3 gap-2">{BG_STYLES.map((s) => <button key={s.id} onClick={() => setFormData({ ...formData, bgStyle: s.id })} className={`h-12 rounded-lg border flex items-center justify-center text-[10px] font-bold uppercase transition-all ${formData.bgStyle === s.id ? "ring-2 ring-indigo-500 border-transparent" : "hover:border-slate-300"}`}><div className={`w-full h-full rounded-md ${s.id === "soft" ? "bg-gradient-to-br from-white via-slate-100 to-white" : s.id === "mesh" ? "bg-indigo-50" : "bg-white"}`}></div><span className="absolute">{s.name}</span></button>)}</div></div>
-                <div><label className="block text-xs font-bold text-slate-500 mb-2">Titelbild</label><div className="flex gap-2"><button onClick={() => setFormData({ ...formData, heroStyle: "compact" })} className={`flex-1 p-2 border rounded-lg flex flex-col items-center gap-2 ${formData.heroStyle === "compact" ? "bg-indigo-50 border-indigo-500 text-indigo-700" : "hover:bg-slate-50"}`}><div className="w-full h-8 bg-slate-200 rounded-md"></div><span className="text-[10px] font-bold">Kompakt</span></button><button onClick={() => setFormData({ ...formData, heroStyle: "full" })} className={`flex-1 p-2 border rounded-lg flex flex-col items-center gap-2 ${formData.heroStyle === "full" ? "bg-indigo-50 border-indigo-500 text-indigo-700" : "hover:bg-slate-50"}`}><div className="w-full h-8 bg-slate-800 rounded-md"></div><span className="text-[10px] font-bold">Vollbild</span></button></div></div>
-                <div className="border-t pt-4"><label className="block text-xs font-bold text-slate-500 mb-2">Karten-Stil (Vorschau)</label><ThemeSelector selected={formData.theme} onSelect={(t) => setFormData({ ...formData, theme: t })} /></div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-2">
+                    Akzentfarbe
+                  </label>
+                  <div className="flex gap-2 flex-wrap">
+                    {ACCENT_COLORS.map((c) => (
+                      <button
+                        key={c.id}
+                        onClick={() =>
+                          setFormData({ ...formData, accentColor: c.id })
+                        }
+                        className={`w-8 h-8 rounded-full transition-all ${
+                          formData.accentColor === c.id
+                            ? "ring-2 ring-offset-2 ring-slate-400 scale-110"
+                            : "hover:scale-105"
+                        }`}
+                        style={{ backgroundColor: c.hex }}
+                        title={c.name}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-2">
+                    Hintergrund
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {BG_STYLES.map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() =>
+                          setFormData({ ...formData, bgStyle: s.id })
+                        }
+                        className={`h-12 rounded-lg border flex items-center justify-center text-[10px] font-bold uppercase transition-all ${
+                          formData.bgStyle === s.id
+                            ? "ring-2 ring-indigo-500 border-transparent"
+                            : "hover:border-slate-300"
+                        }`}
+                      >
+                        <div
+                          className={`w-full h-full rounded-md ${
+                            s.id === "soft"
+                              ? "bg-gradient-to-br from-white via-slate-100 to-white"
+                              : s.id === "mesh"
+                              ? "bg-indigo-50"
+                              : "bg-white"
+                          }`}
+                        ></div>
+                        <span className="absolute">{s.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-2">
+                    Titelbild
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() =>
+                        setFormData({ ...formData, heroStyle: "compact" })
+                      }
+                      className={`flex-1 p-2 border rounded-lg flex flex-col items-center gap-2 ${
+                        formData.heroStyle === "compact"
+                          ? "bg-indigo-50 border-indigo-500 text-indigo-700"
+                          : "hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="w-full h-8 bg-slate-200 rounded-md"></div>
+                      <span className="text-[10px] font-bold">Kompakt</span>
+                    </button>
+                    <button
+                      onClick={() =>
+                        setFormData({ ...formData, heroStyle: "full" })
+                      }
+                      className={`flex-1 p-2 border rounded-lg flex flex-col items-center gap-2 ${
+                        formData.heroStyle === "full"
+                          ? "bg-indigo-50 border-indigo-500 text-indigo-700"
+                          : "hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="w-full h-8 bg-slate-800 rounded-md"></div>
+                      <span className="text-[10px] font-bold">Vollbild</span>
+                    </button>
+                  </div>
+                </div>
+                <div className="border-t pt-4">
+                  <label className="block text-xs font-bold text-slate-500 mb-2">
+                    Karten-Stil (Vorschau)
+                  </label>
+                  <ThemeSelector
+                    selected={formData.theme}
+                    onSelect={(t) => setFormData({ ...formData, theme: t })}
+                  />
+                </div>
               </div>
             </section>
           </div>
@@ -2129,7 +2399,7 @@ export default function App() {
           <div className="text-center py-20 border-2 border-dashed border-slate-200 rounded-3xl mt-8">
             <p className="text-slate-400 mb-4">Noch gähnende Leere hier.</p>
             <Button variant="secondary" onClick={startCreate}>
-              Trau dich Buzi 
+              Trau dich Buzi
             </Button>
           </div>
         )}
