@@ -583,6 +583,8 @@ const MapTile = React.memo(({ src, style }) => (
     style={style}
     className="select-none grayscale-[0.2] contrast-[1.05]"
     alt=""
+    draggable={false}
+    onDragStart={(e) => e.preventDefault()}
   />
 ));
 
@@ -739,6 +741,9 @@ const InteractiveMap = ({ memories, onNavigate }) => {
 
     // --- MOUSE HANDLERS ---
     const onMouseDown = (e) => {
+      // Prevent default browser drag behavior (ghost image)
+      e.preventDefault();
+
       isDragging = true;
       startX = e.clientX;
       startY = e.clientY;
@@ -1018,7 +1023,7 @@ const InteractiveMap = ({ memories, onNavigate }) => {
     <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden bg-slate-100 relative">
       <div
         ref={containerRef}
-        className="flex-1 relative overflow-hidden cursor-move bg-[#cad2d3]"
+        className="flex-1 relative overflow-hidden cursor-grab active:cursor-grabbing bg-[#cad2d3]"
         style={{ touchAction: "none" }} // Critical for touch handling
         onClick={() => setSelectedLoc(null)}
       >
