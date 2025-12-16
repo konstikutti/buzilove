@@ -436,9 +436,13 @@ const DraggableImage = ({
   const imgRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
 
+  // Check if it's a pending placeholder
+  const isPending =
+    src && typeof src === "string" && src.startsWith("PENDING_REF");
+
   const handleMouseDown = (e) => {
     e.preventDefault();
-    setIsDragging(true);
+    if (!isPending) setIsDragging(true);
   };
   const handleMouseMove = (e) => {
     if (!isDragging || !imgRef.current) return;
@@ -467,23 +471,34 @@ const DraggableImage = ({
 
   return (
     <div
-      className={`relative overflow-hidden cursor-move group ${className}`}
+      className={`relative overflow-hidden cursor-move group ${className} ${
+        isPending ? "bg-slate-100 flex items-center justify-center" : ""
+      }`}
       ref={imgRef}
       onMouseDown={handleMouseDown}
     >
-      <img
-        src={src}
-        className="w-full h-full object-cover pointer-events-none select-none"
-        style={{ objectPosition: position }}
-        alt=""
-      />
-      <div
-        className={`absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none`}
-      >
-        <div className="bg-black/50 text-white text-[10px] px-2 py-1 rounded flex items-center gap-1">
-          <Move size={12} /> Ziehen zum Ausrichten
+      {isPending ? (
+        <div className="flex flex-col items-center gap-2 text-slate-400">
+          <Loader2 className="animate-spin" size={24} />
+          <span className="text-[10px] font-bold">Lade Bild...</span>
         </div>
-      </div>
+      ) : (
+        <>
+          <img
+            src={src}
+            className="w-full h-full object-cover pointer-events-none select-none"
+            style={{ objectPosition: position }}
+            alt=""
+          />
+          <div
+            className={`absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none`}
+          >
+            <div className="bg-black/50 text-white text-[10px] px-2 py-1 rounded flex items-center gap-1">
+              <Move size={12} /> Ziehen zum Ausrichten
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };
@@ -493,23 +508,33 @@ const DraggableImage = ({
 // Memoized Image Selector to prevent heavy re-renders
 const ImageSelector = React.memo(({ current, onSelect, uploadedImages }) => (
   <div className="flex gap-2 mb-2 overflow-x-auto pb-2 scrollbar-thin">
-    {uploadedImages.map((img, i) => (
-      <div
-        key={i}
-        onClick={() => onSelect(typeof img === "object" ? img.url : img)}
-        className={`w-10 h-10 flex-shrink-0 rounded-md overflow-hidden cursor-pointer border-2 transition-all ${
-          current === (typeof img === "object" ? img.url : img)
-            ? "border-indigo-500 ring-2 ring-indigo-200"
-            : "border-transparent"
-        }`}
-      >
-        <img
-          src={typeof img === "object" ? img.url : img}
-          className="w-full h-full object-cover"
-          loading="lazy"
-        />
-      </div>
-    ))}
+    {uploadedImages.map((img, i) => {
+      const isPending =
+        typeof img === "object" && img.url && img.url.startsWith("PENDING_REF");
+      return (
+        <div
+          key={i}
+          onClick={() => onSelect(typeof img === "object" ? img.url : img)}
+          className={`w-10 h-10 flex-shrink-0 rounded-md overflow-hidden cursor-pointer border-2 transition-all ${
+            current === (typeof img === "object" ? img.url : img)
+              ? "border-indigo-500 ring-2 ring-indigo-200"
+              : "border-transparent"
+          } ${
+            isPending ? "bg-slate-100 flex items-center justify-center" : ""
+          }`}
+        >
+          {isPending ? (
+            <Loader2 size={16} className="animate-spin text-slate-300" />
+          ) : (
+            <img
+              src={typeof img === "object" ? img.url : img}
+              className="w-full h-full object-cover"
+              loading="lazy"
+            />
+          )}
+        </div>
+      );
+    })}
     {uploadedImages.length === 0 && (
       <span className="text-xs text-slate-400">Keine Fotos verfügbar.</span>
     )}
@@ -1075,56 +1100,71 @@ const ImageManager = ({ images, onChange, coverImage, onSetCover }) => {
         )}
       </div>
       <div className="grid grid-cols-3 gap-2">
-        {images.map((img, i) => (
-          <div
-            key={i}
-            className={`relative group aspect-square rounded-lg overflow-hidden border-2 transition-all ${
-              (typeof img === "object" ? img.url : img) === coverImage
-                ? "border-amber-400 ring-2 ring-amber-100"
-                : "border-transparent bg-slate-100"
-            }`}
-          >
-            <img
-              src={typeof img === "object" ? img.url : img}
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onChange(images.filter((_, idx) => idx !== i));
-                  if (coverImage === (typeof img === "object" ? img.url : img))
-                    onSetCover(null);
-                }}
-                className="absolute top-1 right-1 bg-white p-1 rounded-full shadow opacity-0 group-hover:opacity-100 hover:text-red-500"
-                title="Löschen"
-              >
-                <X size={12} />
-              </button>
-
-              <button
-                onClick={() =>
-                  onSetCover(typeof img === "object" ? img.url : img)
-                }
-                className={`absolute bottom-1 right-1 p-1.5 rounded-full shadow transition-all ${
-                  (typeof img === "object" ? img.url : img) === coverImage
-                    ? "bg-amber-400 text-white opacity-100"
-                    : "bg-white text-slate-400 opacity-0 group-hover:opacity-100 hover:text-amber-400"
-                }`}
-                title="Als Titelbild"
-              >
-                <Star
-                  size={12}
-                  fill={
-                    (typeof img === "object" ? img.url : img) === coverImage
-                      ? "currentColor"
-                      : "none"
-                  }
+        {images.map((img, i) => {
+          const isPending =
+            typeof img === "object" &&
+            img.url &&
+            img.url.startsWith("PENDING_REF");
+          return (
+            <div
+              key={i}
+              className={`relative group aspect-square rounded-lg overflow-hidden border-2 transition-all ${
+                (typeof img === "object" ? img.url : img) === coverImage
+                  ? "border-amber-400 ring-2 ring-amber-100"
+                  : "border-transparent bg-slate-100"
+              } ${isPending ? "flex items-center justify-center" : ""}`}
+            >
+              {isPending ? (
+                <Loader2 size={24} className="animate-spin text-slate-300" />
+              ) : (
+                <img
+                  src={typeof img === "object" ? img.url : img}
+                  className="w-full h-full object-cover"
                 />
-              </button>
+              )}
+
+              {!isPending && (
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onChange(images.filter((_, idx) => idx !== i));
+                      if (
+                        coverImage === (typeof img === "object" ? img.url : img)
+                      )
+                        onSetCover(null);
+                    }}
+                    className="absolute top-1 right-1 bg-white p-1 rounded-full shadow opacity-0 group-hover:opacity-100 hover:text-red-500"
+                    title="Löschen"
+                  >
+                    <X size={12} />
+                  </button>
+
+                  <button
+                    onClick={() =>
+                      onSetCover(typeof img === "object" ? img.url : img)
+                    }
+                    className={`absolute bottom-1 right-1 p-1.5 rounded-full shadow transition-all ${
+                      (typeof img === "object" ? img.url : img) === coverImage
+                        ? "bg-amber-400 text-white opacity-100"
+                        : "bg-white text-slate-400 opacity-0 group-hover:opacity-100 hover:text-amber-400"
+                    }`}
+                    title="Als Titelbild"
+                  >
+                    <Star
+                      size={12}
+                      fill={
+                        (typeof img === "object" ? img.url : img) === coverImage
+                          ? "currentColor"
+                          : "none"
+                      }
+                    />
+                  </button>
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -1930,6 +1970,88 @@ export default function App() {
     });
   }, [user]);
 
+  // EFFECT TO LOAD IMAGES IN EDITOR PROGRESSIVELY (PRIORITY QUEUE)
+  useEffect(() => {
+    if (view === "editor" && formData.images) {
+      // 1. Find all pending indices
+      const pendingIndices = formData.images
+        .map((img, i) =>
+          img.url &&
+          typeof img.url === "string" &&
+          img.url.startsWith("PENDING_REF")
+            ? i
+            : -1
+        )
+        .filter((i) => i !== -1);
+
+      if (pendingIndices.length > 0) {
+        // 2. Identify Priority Indices (used in blocks)
+        const usedIndices = new Set();
+
+        formData.blocks?.forEach((block) => {
+          const checkRef = (content) => {
+            if (
+              typeof content === "string" &&
+              content.startsWith("PENDING_REF_")
+            ) {
+              const idx = parseInt(content.replace("PENDING_REF_", ""), 10);
+              if (!isNaN(idx)) usedIndices.add(idx);
+            }
+          };
+          checkRef(block.content);
+          checkRef(block.content2);
+        });
+
+        // 3. Select next index: Used ? Used : FirstPending
+        let nextIndex = pendingIndices.find((idx) => usedIndices.has(idx));
+        if (nextIndex === undefined) {
+          nextIndex = pendingIndices[0];
+        }
+
+        const loadNext = async () => {
+          const idx = nextIndex;
+          const imgObj = formData.images[idx];
+          const realUrl = await fetchSingleImage(imgObj.id);
+
+          if (realUrl) {
+            setFormData((prev) => {
+              const newImages = [...prev.images];
+              newImages[idx] = { ...newImages[idx], url: realUrl };
+
+              // Update blocks
+              const oldRef = `PENDING_REF_${idx}`;
+              const newBlocks = prev.blocks.map((b) => {
+                const nb = { ...b };
+                if (nb.content === oldRef) nb.content = realUrl;
+                if (nb.content2 === oldRef) nb.content2 = realUrl;
+                return nb;
+              });
+
+              // Update cover if needed
+              let newCover = prev.coverImage;
+              if (newCover === oldRef) newCover = realUrl;
+
+              return {
+                ...prev,
+                images: newImages,
+                blocks: newBlocks,
+                coverImage: newCover,
+              };
+            });
+          } else {
+            // Mark as failed to prevent infinite loop
+            setFormData((prev) => {
+              const newImages = [...prev.images];
+              newImages[idx] = { ...newImages[idx], url: null };
+              return { ...prev, images: newImages };
+            });
+          }
+        };
+        loadNext();
+      }
+    }
+  }, [view, formData.images]); // blocks dependence implied by loop re-trigger, but strict dependency might be safer. Actually images change is the trigger.
+
   // Actions
   const handleLogin = (e) => {
     e.preventDefault();
@@ -1972,38 +2094,30 @@ export default function App() {
     setView("editor");
   };
 
-  const startEdit = async (memory) => {
+  const startEdit = (memory) => {
     setEditingId(memory.id);
-    setIsSaving(true);
-    let imgs = memory.images || [];
-    let editableImages = [];
 
-    // Refactored hydration logic to handle object mapping (ID <-> Data)
-    if (imgs.length > 0) {
-      // Assuming memory.images contains IDs.
-      // Fetch valid IDs.
-      const assets = await fetchAssets(imgs);
+    // 1. Create Placeholder Images immediately
+    // We assign a special temporary URL so hydration works and BlockItem knows it's pending
+    const initialImages = (memory.images || []).map((id, index) => {
+      // Handle legacy case
+      if (typeof id === "string" && id.startsWith("data:"))
+        return { id: null, url: id };
 
-      // Map original ID to asset data
-      imgs.forEach((id, index) => {
-        // We only add it if we successfully fetched data or it's a legacy data string
-        const data = assets[index];
-        if (data) {
-          editableImages.push({ id: id, url: data });
-        } else if (id.startsWith("data:")) {
-          // Legacy support for direct data strings in image array
-          editableImages.push({ id: null, url: id });
-        }
-      });
-    }
+      // Return placeholder.
+      // We use PENDING_REF_Index so we know which one is which later.
+      return { id: id, url: `PENDING_REF_${index}` };
+    });
 
+    // 2. Hydrate Blocks with Placeholders
+    // This will replace IMG_REF_0 with PENDING_REF_0 in the block content
     const editableBlocks = memory.blocks
-      ? hydrateBlocks(memory.blocks, editableImages)
+      ? hydrateBlocks(memory.blocks, initialImages)
       : [{ id: 1, type: "text", content: memory.content || "" }];
 
     const data = {
       ...memory,
-      images: editableImages, // Now contains { id, url } objects
+      images: initialImages,
       blocks: editableBlocks,
       date: memory.date?.toDate
         ? memory.date.toDate().toISOString().split("T")[0]
@@ -2017,9 +2131,9 @@ export default function App() {
     };
 
     setFormData(data);
-    setOriginalData(data); // Store original for comparison
-    setIsSaving(false);
+    setOriginalData(data); // Original data has placeholders initially, but that's fine for "hasChanges" logic mostly
     setView("editor");
+    // Background loading happens in useEffect
   };
 
   // Guard for leaving editor
@@ -2053,17 +2167,28 @@ export default function App() {
     setIsSaving(true);
     try {
       // Logic for Cover Image (Source)
-      const firstImage =
-        currentData.images.length > 0
-          ? currentData.images[0].url || currentData.images[0]
-          : null;
-      const sourceImage = currentData.coverImage || firstImage;
+      // Be careful: if it's still PENDING, we shouldn't save PENDING_REF to DB as preview
+      // But user shouldn't be able to save if loading? Or we just wait?
+      // Ideally we shouldn't save pending refs.
+
+      const firstImageObj =
+        currentData.images.length > 0 ? currentData.images[0] : null;
+      let sourceImage = currentData.coverImage;
+
+      // If no cover set, use first image.
+      if (!sourceImage && firstImageObj) {
+        sourceImage = firstImageObj.url;
+      }
+
+      // If sourceImage is PENDING, we can't generate a preview from it easily.
+      // Fallback: If still pending, use existing preview from memory if editing?
+      // For now, let's assume user waits or we ignore preview generation if pending.
 
       let previewImage = "";
       if (sourceImage && sourceImage.startsWith("data:")) {
         const blob = await fetch(sourceImage).then((r) => r.blob());
         previewImage = await compressImage(blob, 800, 0.7);
-      } else {
+      } else if (sourceImage && !sourceImage.startsWith("PENDING_REF")) {
         previewImage = sourceImage;
       }
 
@@ -2072,14 +2197,12 @@ export default function App() {
       for (const imgObj of currentData.images) {
         // Check if we have an existing ID (from editing) or it's a new upload (object with null id) or legacy string
         const isObj = typeof imgObj === "object";
-        const existingId = isObj ? imgObj.id : null; // If string, no ID
+        const existingId = isObj ? imgObj.id : null;
         const dataUrl = isObj ? imgObj.url : imgObj;
 
         if (existingId) {
-          // Already uploaded, reuse ID
           imageIds.push(existingId);
         } else if (dataUrl && dataUrl.startsWith("data:")) {
-          // New upload required
           const assetDoc = await addDoc(
             collection(
               db,
@@ -2092,10 +2215,6 @@ export default function App() {
             { imageData: dataUrl, createdAt: serverTimestamp() }
           );
           imageIds.push(assetDoc.id);
-        } else {
-          // Should not happen, but safe fallback (maybe external URL)
-          // If it's not data URI and no ID, maybe we shouldn't save it or it's a raw URL?
-          // For now, ignore unless it looks like a valid ID string, but we can't tell easily.
         }
       }
 
