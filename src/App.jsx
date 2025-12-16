@@ -69,6 +69,9 @@ import {
   Bold,
   AArrowUp,
   CalendarDays,
+  AlertTriangle,
+  Info,
+  Save,
 } from "lucide-react";
 
 // --- Firebase Konfiguration ---
@@ -191,9 +194,9 @@ const compressImage = (file, maxWidth = 1600, quality = 0.8) => {
 
 // --- DATA LOGIC ---
 
-// FETCH HELPER FÜR EINZELNES BILD
 const fetchSingleImage = async (id) => {
   if (!id) return null;
+  if (typeof id !== "string") return null; // Safety check
   if (id.startsWith("data:") || id.startsWith("http")) return id;
   try {
     const docRef = doc(
@@ -216,6 +219,7 @@ const fetchSingleImage = async (id) => {
 const fetchAssets = async (assetIds) => {
   if (!assetIds || assetIds.length === 0) return [];
   const promises = assetIds.map(async (id) => {
+    if (typeof id !== "string") return null;
     if (id.startsWith("data:") || id.startsWith("http")) return id;
     try {
       const docRef = doc(
@@ -235,10 +239,7 @@ const fetchAssets = async (assetIds) => {
       return null;
     }
   });
-
-  const results = await Promise.all(promises);
-  // Removed filter(Boolean) to keep index alignment
-  return results;
+  return Promise.all(promises);
 };
 
 const hydrateBlocks = (blocks, images) => {
@@ -250,8 +251,9 @@ const hydrateBlocks = (blocks, images) => {
         const index = parseInt(content.replace("IMG_REF_", ""), 10);
         const item = images[index];
         if (!item) return "";
-        // Handle both simple strings (legacy/view) and objects (edit mode)
-        return typeof item === "object" ? item.url : item;
+        // Safely extract URL or string, ensuring no objects leak into JSX text
+        const val = typeof item === "object" ? item?.url || "" : item;
+        return typeof val === "string" ? val : "";
       }
       return content;
     };
@@ -267,12 +269,10 @@ const dehydrateBlocks = (blocks, images) => {
   return blocks.map((block) => {
     const newBlock = { ...block };
     const makeRef = (content) => {
-      // Handle images array of objects or strings
       const index = images.findIndex((img) => {
         const url = typeof img === "object" ? img.url : img;
         return url === content;
       });
-
       if (index !== -1) return `IMG_REF_${index}`;
       return content;
     };
@@ -286,7 +286,41 @@ const dehydrateBlocks = (blocks, images) => {
   });
 };
 
-// --- Components ---
+// --- BASE COMPONENTS ---
+
+const Toast = ({ message, type, onClose }) => {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  const bg =
+    type === "error"
+      ? "bg-red-500"
+      : type === "success"
+      ? "bg-green-500"
+      : "bg-slate-800";
+  const icon =
+    type === "error" ? (
+      <AlertTriangle size={18} />
+    ) : type === "success" ? (
+      <CheckCircle size={18} />
+    ) : (
+      <Info size={18} />
+    );
+
+  return (
+    <div
+      className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl text-white mb-2 animate-in slide-in-from-bottom-5 fade-in ${bg} max-w-sm`}
+    >
+      <div className="flex-shrink-0">{icon}</div>
+      <span className="text-sm font-medium">{String(message)}</span>
+      <button onClick={onClose} className="ml-auto">
+        <X size={14} className="opacity-70 hover:opacity-100" />
+      </button>
+    </div>
+  );
+};
 
 const Button = ({
   children,
@@ -321,27 +355,18 @@ const Button = ({
   );
 };
 
-// --- LAZY INPUTS (Echte Performance-Optimierung) ---
-// Aktualisieren den Haupt-State NUR beim Verlassen (onBlur), niemals beim Tippen.
-
 const LazyInput = ({ value, onChange, ...props }) => {
   const [localValue, setLocalValue] = useState(value || "");
-
   useEffect(() => {
     setLocalValue(value || "");
   }, [value]);
-
   const handleChange = (e) => {
     setLocalValue(e.target.value);
   };
-
   const handleBlur = (e) => {
-    // Wenn sich der Wert geändert hat, sende ihn an den Hauptspeicher
-    if (onChange && localValue !== value) {
+    if (onChange && localValue !== value)
       onChange({ target: { value: localValue } });
-    }
   };
-
   return (
     <input
       value={localValue}
@@ -354,21 +379,16 @@ const LazyInput = ({ value, onChange, ...props }) => {
 
 const LazyTextarea = ({ value, onChange, ...props }) => {
   const [localValue, setLocalValue] = useState(value || "");
-
   useEffect(() => {
     setLocalValue(value || "");
   }, [value]);
-
   const handleChange = (e) => {
     setLocalValue(e.target.value);
   };
-
   const handleBlur = (e) => {
-    if (onChange && localValue !== value) {
+    if (onChange && localValue !== value)
       onChange({ target: { value: localValue } });
-    }
   };
-
   return (
     <textarea
       value={localValue}
@@ -379,7 +399,6 @@ const LazyTextarea = ({ value, onChange, ...props }) => {
   );
 };
 
-// Standard Input Wrapper (entscheidet ob Lazy oder Normal)
 const Input = ({
   label,
   value,
@@ -395,7 +414,6 @@ const Input = ({
         {label}
       </label>
     )}
-    {/* Nutze LazyInput für Performance im Editor, normales input für Login */}
     {type === "text" && typeof onChange === "function" ? (
       <LazyInput
         name={name}
@@ -413,7 +431,6 @@ const Input = ({
       <input
         name={name}
         type={type}
-        // Wenn value existiert, nutzen wir es. Sonst lassen wir es weg (für Login)
         {...(value !== undefined ? { value } : {})}
         onChange={onChange}
         placeholder={placeholder}
@@ -435,8 +452,6 @@ const DraggableImage = ({
 }) => {
   const imgRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
-
-  // Check if it's a pending placeholder
   const isPending =
     src && typeof src === "string" && src.startsWith("PENDING_REF");
 
@@ -503,9 +518,8 @@ const DraggableImage = ({
   );
 };
 
-// --- EDITOR COMPONENTS ---
+// --- EDITOR SUB-COMPONENTS ---
 
-// Memoized Image Selector to prevent heavy re-renders
 const ImageSelector = React.memo(({ current, onSelect, uploadedImages }) => (
   <div className="flex gap-2 mb-2 overflow-x-auto pb-2 scrollbar-thin">
     {uploadedImages.map((img, i) => {
@@ -541,7 +555,6 @@ const ImageSelector = React.memo(({ current, onSelect, uploadedImages }) => (
   </div>
 ));
 
-// Optimized BlockItem with custom comparison to prevent re-renders when other blocks change
 const BlockItem = React.memo(
   ({
     block,
@@ -554,7 +567,6 @@ const BlockItem = React.memo(
   }) => {
     return (
       <div className="group relative bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-indigo-300 transition-all">
-        {/* Controls */}
         <div className="absolute right-2 top-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 backdrop-blur p-1 rounded-lg border border-slate-100 shadow-sm z-20">
           <Button
             variant="icon"
@@ -601,7 +613,6 @@ const BlockItem = React.memo(
               className="absolute left-2 top-1.5 text-slate-400"
             />
           </div>
-
           {(["header", "text", "quote", "note"].includes(block.type) ||
             (block.type === "image" &&
               (block.layout === "left" || block.layout === "right"))) && (
@@ -649,7 +660,6 @@ const BlockItem = React.memo(
               </div>
             </>
           )}
-
           {["header", "text", "quote"].includes(block.type) && (
             <>
               <div className="w-px h-4 bg-slate-200 mx-1"></div>
@@ -687,7 +697,6 @@ const BlockItem = React.memo(
               </div>
             </>
           )}
-
           {block.type === "image" && (
             <div className="flex bg-slate-50 rounded border p-0.5 ml-2">
               <button
@@ -816,7 +825,6 @@ const BlockItem = React.memo(
                   }
                   className="h-48 w-full rounded border border-slate-200"
                 />
-
                 {(block.layout === "left" || block.layout === "right") && (
                   <div className="mt-2 border-t pt-2 border-slate-100">
                     <label className="text-[10px] text-slate-400 font-bold uppercase mb-1 block">
@@ -836,7 +844,6 @@ const BlockItem = React.memo(
                     />
                   </div>
                 )}
-
                 <LazyInput
                   value={block.caption || ""}
                   onChange={(e) =>
@@ -943,7 +950,6 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
   const updateBlock = (id, upd) =>
     onChange(blocks.map((b) => (b.id === id ? { ...b, ...upd } : b)));
   const removeBlock = (id) => onChange(blocks.filter((b) => b.id !== id));
-
   const moveBlock = (idx, dir) => {
     const arr = [...blocks];
     if (dir === "up" && idx > 0)
@@ -967,7 +973,6 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
           uploadedImages={uploadedImages}
         />
       ))}
-
       <div className="flex flex-wrap justify-center gap-2 pt-4 border-t border-dashed">
         <Button
           variant="secondary"
@@ -1027,7 +1032,7 @@ const BlockEditor = ({ blocks, onChange, uploadedImages }) => {
 
 const ImageManager = ({ images, onChange, coverImage, onSetCover }) => {
   const [loading, setLoading] = useState(false);
-  const [progress, setProgress] = useState(""); // NEU: Fortschrittsanzeige
+  const [progress, setProgress] = useState("");
   const fileInput = useRef(null);
 
   const handleFiles = async (e) => {
@@ -1037,14 +1042,9 @@ const ImageManager = ({ images, onChange, coverImage, onSetCover }) => {
     setLoading(true);
     const newImgs = [];
 
-    // Änderung: Normale Schleife mit Pause für den Browser
     for (let i = 0; i < files.length; i++) {
       const f = files[i];
-
-      // Fortschritt anzeigen
       setProgress(`${i + 1} von ${files.length}`);
-
-      // WICHTIG: 20ms Pause, damit der Browser nicht einfriert
       await new Promise((resolve) => setTimeout(resolve, 20));
 
       try {
@@ -1122,7 +1122,6 @@ const ImageManager = ({ images, onChange, coverImage, onSetCover }) => {
                   className="w-full h-full object-cover"
                 />
               )}
-
               {!isPending && (
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors">
                   <button
@@ -1139,7 +1138,6 @@ const ImageManager = ({ images, onChange, coverImage, onSetCover }) => {
                   >
                     <X size={12} />
                   </button>
-
                   <button
                     onClick={() =>
                       onSetCover(typeof img === "object" ? img.url : img)
@@ -1181,7 +1179,6 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
       : a === "zoom-in"
       ? "animate-zoom-in"
       : "";
-
   const getLayoutClasses = (layout, style) => {
     let classes = "my-6 relative ";
     let imgStyle = "w-full object-cover ";
@@ -1189,11 +1186,9 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
       classes += "w-full block clear-both md:-mx-12 md:w-[calc(100%+6rem)]";
       imgStyle += "rounded-lg md:rounded-none h-[300px] md:h-[600px]";
     } else if (layout === "left") {
-      // FIX: Flex-Layout für Links
       classes += "flex flex-col md:flex-row items-center gap-8 clear-both";
-      imgStyle += "rounded-2xl shadow-md w-full"; // Breite wird vom Wrapper gesteuert
+      imgStyle += "rounded-2xl shadow-md w-full";
     } else if (layout === "right") {
-      // FIX: Flex-Layout für Rechts (Reverse)
       classes +=
         "flex flex-col md:flex-row-reverse items-center gap-8 clear-both";
       imgStyle += "rounded-2xl shadow-md w-full";
@@ -1201,7 +1196,6 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
       classes += "w-full block clear-both";
       imgStyle += "rounded-2xl shadow-md";
     }
-
     if (style === "circle") imgStyle += " rounded-full aspect-square";
     if (style === "frame") imgStyle += " p-2 bg-white border shadow-md";
     return { classes, imgStyle };
@@ -1224,7 +1218,7 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
                 theme === "cinema" ? "text-white italic" : "text-slate-900"
               }`}
             >
-              {b.content}
+              {String(b.content || "")}
             </h3>
           )}
           {b.type === "text" && (
@@ -1233,7 +1227,7 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
                 theme === "cinema" ? "text-slate-300" : "text-slate-700 text-lg"
               }`}
             >
-              {b.content}
+              {String(b.content || "")}
             </p>
           )}
           {b.type === "quote" && (
@@ -1243,7 +1237,7 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
               }`}
               style={{ color: theme !== "cinema" ? accentHex : undefined }}
             >
-              "{b.content}"
+              "{String(b.content || "")}"
             </blockquote>
           )}
           {b.type === "divider" && (
@@ -1259,11 +1253,9 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
                   : "bg-amber-50 border-amber-400 text-amber-900"
               }`}
             >
-              {b.content}
+              {String(b.content || "")}
             </div>
           )}
-
-          {/* BILD BLOCK MIT NEUER SIDE-TEXT LOGIK */}
           {b.type === "image" &&
             b.content &&
             (() => {
@@ -1271,16 +1263,13 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
                 b.layout,
                 b.imgStyle
               );
-              // Check if we use the new Flex layout (Left/Right)
               const isSideLayout = b.layout === "left" || b.layout === "right";
-
               return (
                 <div
                   className={
                     isSideLayout ? classes : `my-6 relative ${classes}`
                   }
                 >
-                  {/* BILD CONTAINER */}
                   <div className={isSideLayout ? "w-full md:w-1/2" : "w-full"}>
                     <figure>
                       <img
@@ -1296,8 +1285,6 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
                       )}
                     </figure>
                   </div>
-
-                  {/* SIDE TEXT CONTAINER (nur bei Side Layout und wenn Text existiert) */}
                   {isSideLayout && (
                     <div className="w-full md:w-1/2 flex items-center justify-center p-4">
                       <div
@@ -1311,14 +1298,13 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
                             : "text-slate-700"
                         }`}
                       >
-                        {b.sideText}
+                        {String(b.sideText || "")}
                       </div>
                     </div>
                   )}
                 </div>
               );
             })()}
-
           {b.type === "image-pair" && (
             <div className="grid grid-cols-2 gap-4 my-8 clear-both">
               <img
@@ -1405,13 +1391,11 @@ const ThemeSelector = ({ selected, onSelect }) => {
 const MemoryCard = ({ memory, onClick }) => {
   const { title, author, date, endDate, theme, location, blocks } = memory;
   const images = memory.images || [];
-  // Use cover image if available, else first image
   const previewImage =
     memory.coverImage ||
     memory.previewImage ||
     (images.length > 0 ? images[0] : "");
 
-  // Extract text for preview
   const getPreviewText = () => {
     if (!blocks) return "";
     const hydrated = hydrateBlocks(blocks, images);
@@ -1444,7 +1428,6 @@ const MemoryCard = ({ memory, onClick }) => {
     </div>
   );
 
-  // THEME: POLAROID
   if (theme === "polaroid") {
     return (
       <Container className="group relative">
@@ -1472,7 +1455,6 @@ const MemoryCard = ({ memory, onClick }) => {
     );
   }
 
-  // THEME: CINEMA
   if (theme === "cinema") {
     return (
       <Container className="relative rounded-xl overflow-hidden shadow-lg group bg-black aspect-[4/3]">
@@ -1498,7 +1480,6 @@ const MemoryCard = ({ memory, onClick }) => {
     );
   }
 
-  // THEME: JOURNAL
   if (theme === "journal") {
     return (
       <Container className="bg-[#fdfbf7] p-6 rounded-sm shadow-sm border border-slate-200 hover:shadow-md group">
@@ -1524,7 +1505,6 @@ const MemoryCard = ({ memory, onClick }) => {
     );
   }
 
-  // THEME: MODERN (Default)
   return (
     <Container className="bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-xl group border border-slate-100 h-full flex flex-col">
       <div className="relative">
@@ -1551,7 +1531,6 @@ const MemoryCard = ({ memory, onClick }) => {
         <h3 className="text-xl font-bold text-slate-900 mb-3 leading-tight">
           {title}
         </h3>
-        {/* Nur anzeigen, wenn Text da ist, sonst leer lassen */}
         {previewText && (
           <p className="text-slate-600 text-sm leading-relaxed mb-4 line-clamp-3">
             {previewText}
@@ -1568,38 +1547,50 @@ const MemoryCard = ({ memory, onClick }) => {
   );
 };
 
-// --- MEMORY DETAIL ---
 const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
-  // Initialize with nulls to reserve space in array
   const [hydratedImages, setHydratedImages] = useState(() =>
     new Array(memory.images?.length || 0).fill(null)
   );
-
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [activeImg, setActiveImg] = useState(0);
-
-  // Progress tracking
   const [loadedCount, setLoadedCount] = useState(0);
   const totalImages = memory.images?.length || 0;
+
+  const touchStartRef = useRef(null);
+  const touchEndRef = useRef(null);
+  const minSwipeDistance = 50;
+
+  const onTouchStart = (e) => {
+    touchEndRef.current = null;
+    touchStartRef.current = e.targetTouches[0].clientX;
+  };
+  const onTouchMove = (e) => {
+    touchEndRef.current = e.targetTouches[0].clientX;
+  };
+  const onTouchEnd = () => {
+    if (!touchStartRef.current || !touchEndRef.current) return;
+    const distance = touchStartRef.current - touchEndRef.current;
+    if (distance > minSwipeDistance) {
+      if (activeImg < hydratedImages.length - 1)
+        setActiveImg((prev) => prev + 1);
+    }
+    if (distance < -minSwipeDistance) {
+      if (activeImg > 0) setActiveImg((prev) => prev - 1);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
     if (!memory.images || memory.images.length === 0) return;
 
-    // 1. Identify which images are needed for the post (Priority)
     const priorityIndices = new Set();
-
-    // Always prioritize the first image (Title Image)
     if (memory.images.length > 0) priorityIndices.add(0);
-
-    // Scan blocks for used images
     memory.blocks?.forEach((block) => {
       const checkForRef = (content) => {
         if (typeof content === "string" && content.startsWith("IMG_REF_")) {
           const idx = parseInt(content.replace("IMG_REF_", ""), 10);
-          if (!isNaN(idx) && idx < memory.images.length) {
+          if (!isNaN(idx) && idx < memory.images.length)
             priorityIndices.add(idx);
-          }
         }
       };
       checkForRef(block.content);
@@ -1623,29 +1614,20 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
     };
 
     const loadAll = async () => {
-      // Phase 1: Load Priority Images (Parallel)
       await Promise.all(priorityList.map(loadIndex));
-
-      // Phase 2: Load Background Images (Sequential/Batched to save resources)
-      // We load them one by one or in small groups to keep UI responsive
       for (const idx of backgroundList) {
         if (!isMounted) return;
         await loadIndex(idx);
-        // Tiny pause to breathe
         await new Promise((r) => setTimeout(r, 10));
       }
     };
-
     loadAll();
-
     return () => {
       isMounted = false;
     };
-  }, [memory]); // Run only on mount (or if memory changes)
+  }, [memory]);
 
-  // Hydrate blocks using current state of images (some might be null)
   const contentBlocks = useMemo(() => {
-    // If no blocks, use content as text
     if (!memory.blocks)
       return [{ id: 1, type: "text", content: memory.content || "" }];
     return hydrateBlocks(memory.blocks, hydratedImages);
@@ -1654,7 +1636,6 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
   const accent =
     ACCENT_COLORS.find((c) => c.id === memory.accentColor) || ACCENT_COLORS[1];
   const isHeroFull = memory.heroStyle === "full";
-
   const getBg = () => {
     if (memory.theme === "cinema") return "bg-black text-white";
     if (memory.theme === "polaroid") return "bg-[#f0f0f0]";
@@ -1663,7 +1644,6 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
       return `bg-gradient-to-br from-white via-${accent.class}-50/30 to-white`;
     return "bg-white";
   };
-
   const renderDate = () => {
     const start = formatDateSafe(memory.date);
     if (memory.endDate) {
@@ -1672,9 +1652,6 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
     }
     return start;
   };
-
-  // Benutze das Preview-Bild (klein) solange das echte Bild (groß) noch lädt
-  // hydratedImages[0] ist oft das Titelbild
   const currentHeroImage =
     hydratedImages.length > 0 && hydratedImages[0]
       ? hydratedImages[0]
@@ -1682,7 +1659,6 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
 
   return (
     <div className={`min-h-screen ${getBg()}`}>
-      {/* Ladeindikator (unten rechts, nicht blockierend) */}
       {loadedCount < totalImages && (
         <div className="fixed bottom-4 right-4 bg-white/90 backdrop-blur border shadow-lg p-3 rounded-full flex items-center gap-3 text-xs font-bold text-indigo-600 z-50 animate-in slide-in-from-bottom-4">
           <Loader2 size={16} className="animate-spin" />
@@ -1691,58 +1667,63 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
           </span>
         </div>
       )}
-
       {isLightboxOpen && (
         <div
           className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm flex items-center justify-center animate-fade-in"
           onClick={() => setIsLightboxOpen(false)}
         >
           <button
-            className="absolute top-6 right-6 text-white/70 hover:text-white transition-colors bg-white/10 p-2 rounded-full"
+            className="absolute top-6 right-6 text-white/70 hover:text-white transition-colors bg-white/10 p-2 rounded-full z-50"
             onClick={() => setIsLightboxOpen(false)}
           >
             <X size={32} />
           </button>
-          <button
-            className="absolute left-4 md:left-8 text-white/50 hover:text-white transition-colors p-4 hover:bg-white/10 rounded-full"
-            onClick={(e) => {
-              e.stopPropagation();
-              setActiveImg((prev) =>
-                prev > 0 ? prev - 1 : hydratedImages.length - 1
-              );
-            }}
+          <div
+            className="w-full h-full flex items-center justify-center relative"
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
           >
-            <ChevronLeft size={48} />
-          </button>
-          {hydratedImages[activeImg] ? (
-            <img
-              src={hydratedImages[activeImg]}
-              className="max-h-[85vh] max-w-[90vw] object-contain rounded-lg shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            />
-          ) : (
-            <div className="text-white flex flex-col items-center">
-              <Loader2 size={48} className="animate-spin mb-4" />
-              <span>Lade Bild...</span>
-            </div>
-          )}
-          <button
-            className="absolute right-4 md:right-8 text-white/50 hover:text-white transition-colors p-4 hover:bg-white/10 rounded-full"
-            onClick={(e) => {
-              e.stopPropagation();
-              setActiveImg((prev) =>
-                prev < hydratedImages.length - 1 ? prev + 1 : 0
-              );
-            }}
-          >
-            <ChevronRight size={48} />
-          </button>
+            <button
+              className="hidden md:block absolute left-8 text-white/50 hover:text-white transition-colors p-4 hover:bg-white/10 rounded-full z-10"
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveImg((prev) =>
+                  prev > 0 ? prev - 1 : hydratedImages.length - 1
+                );
+              }}
+            >
+              <ChevronLeft size={48} />
+            </button>
+            {hydratedImages[activeImg] ? (
+              <img
+                src={hydratedImages[activeImg]}
+                className="max-h-[85vh] max-w-[90vw] object-contain rounded-lg shadow-2xl transition-transform duration-300"
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) : (
+              <div className="text-white flex flex-col items-center">
+                <Loader2 size={48} className="animate-spin mb-4" />
+                <span>Lade Bild...</span>
+              </div>
+            )}
+            <button
+              className="hidden md:block absolute right-8 text-white/50 hover:text-white transition-colors p-4 hover:bg-white/10 rounded-full z-10"
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveImg((prev) =>
+                  prev < hydratedImages.length - 1 ? prev + 1 : 0
+                );
+              }}
+            >
+              <ChevronRight size={48} />
+            </button>
+          </div>
           <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white/50 font-medium tracking-widest text-sm bg-black/50 px-4 py-1 rounded-full">
             {activeImg + 1} / {hydratedImages.length}
           </div>
         </div>
       )}
-
       <div
         className={`relative w-full ${
           isHeroFull
@@ -1772,7 +1753,6 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
             <ImageIcon className="text-slate-300" size={64} />
           </div>
         )}
-
         <div className="absolute top-0 left-0 right-0 p-6 flex justify-between z-10 bg-gradient-to-b from-black/50 to-transparent pointer-events-none">
           <div className="pointer-events-auto">
             <Button
@@ -1796,7 +1776,6 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
             )}
           </div>
         </div>
-
         {isHeroFull && (
           <div className="absolute bottom-0 w-full p-12 bg-gradient-to-t from-black/80 to-transparent pointer-events-none">
             <div className="max-w-4xl mx-auto text-white">
@@ -1808,7 +1787,6 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
           </div>
         )}
       </div>
-
       <div
         className={`max-w-4xl mx-auto px-6 py-12 ${
           !isHeroFull ? "-mt-12 relative z-20" : ""
@@ -1850,49 +1828,52 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
             theme={memory.theme}
             accentHex={accent.hex}
           />
-
           {hydratedImages.length > 1 && (
             <div className="mt-16 pt-8 border-t">
-              <h4 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4">
+              <h4 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-6">
                 Galerie ({loadedCount} / {hydratedImages.length})
               </h4>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
                 {hydratedImages.map((img, i) => (
-                  <button
-                    key={i}
-                    onClick={() => {
-                      setActiveImg(i);
-                      setIsLightboxOpen(true);
-                    }}
-                    className={`relative group aspect-square rounded-xl overflow-hidden border-2 transition-all ${
-                      activeImg === i
-                        ? "ring-2 ring-offset-2"
-                        : "opacity-80 hover:opacity-100"
-                    } ${!img ? "animate-pulse bg-slate-100" : ""}`}
-                    style={{
-                      borderColor: activeImg === i ? accent.hex : "transparent",
-                      "--tw-ring-color": accent.hex,
-                    }}
-                  >
-                    {img ? (
-                      <img
-                        src={img}
-                        className="w-full h-full object-cover transition-transform group-hover:scale-110"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-slate-200">
-                        <ImageIcon size={24} />
-                      </div>
-                    )}
-                    {img && (
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                        <ZoomIn
-                          className="text-white drop-shadow-md"
-                          size={24}
+                  <div key={i} className="break-inside-avoid mb-4">
+                    <button
+                      onClick={() => {
+                        setActiveImg(i);
+                        setIsLightboxOpen(true);
+                      }}
+                      className={`w-full relative group rounded-xl overflow-hidden transition-all ${
+                        activeImg === i
+                          ? "ring-2 ring-offset-2"
+                          : "opacity-90 hover:opacity-100 hover:scale-[1.02]"
+                      } ${
+                        !img ? "animate-pulse bg-slate-100 aspect-square" : ""
+                      }`}
+                      style={{
+                        borderColor:
+                          activeImg === i ? accent.hex : "transparent",
+                        "--tw-ring-color": accent.hex,
+                      }}
+                    >
+                      {img ? (
+                        <img
+                          src={img}
+                          className="w-full h-auto object-cover rounded-xl"
                         />
-                      </div>
-                    )}
-                  </button>
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-slate-200">
+                          <ImageIcon size={24} />
+                        </div>
+                      )}
+                      {img && (
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100 rounded-xl">
+                          <ZoomIn
+                            className="text-white drop-shadow-md"
+                            size={24}
+                          />
+                        </div>
+                      )}
+                    </button>
+                  </div>
                 ))}
               </div>
             </div>
@@ -1910,10 +1891,10 @@ export default function App() {
   const [memories, setMemories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loginError, setLoginError] = useState("");
-
   const [editingId, setEditingId] = useState(null);
-  // NEW: State to track if changes were made
   const [originalData, setOriginalData] = useState(null);
+  const [toasts, setToasts] = useState([]);
+
   const [formData, setFormData] = useState({
     title: "",
     location: "",
@@ -1925,18 +1906,23 @@ export default function App() {
     images: [],
     blocks: [],
     date: new Date().toISOString().split("T")[0],
-    endDate: "", // Neues Feld für Enddatum
+    endDate: "",
     coverImage: "",
   });
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-
   const [selectedMemory, setSelectedMemory] = useState(null);
 
-  // Check for unsaved changes
+  const addToast = (msg, type = "info") => {
+    const id = Date.now();
+    setToasts((prev) => [...prev, { id, msg: String(msg), type }]);
+  };
+  const removeToast = (id) =>
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+
   const hasChanges = React.useMemo(() => {
-    if (!editingId) return true; // Always allow save on new create
+    if (!editingId) return true;
     if (!originalData) return false;
     return JSON.stringify(formData) !== JSON.stringify(originalData);
   }, [formData, originalData, editingId]);
@@ -1970,10 +1956,19 @@ export default function App() {
     });
   }, [user]);
 
-  // EFFECT TO LOAD IMAGES IN EDITOR PROGRESSIVELY (PRIORITY QUEUE)
+  useEffect(() => {
+    if (view === "editor") {
+      const draftKey = editingId ? `buzi_draft_${editingId}` : "buzi_draft_new";
+      try {
+        localStorage.setItem(draftKey, JSON.stringify(formData));
+      } catch (e) {
+        console.warn("Local storage full, skipping auto-save");
+      }
+    }
+  }, [formData, view, editingId]);
+
   useEffect(() => {
     if (view === "editor" && formData.images) {
-      // 1. Find all pending indices
       const pendingIndices = formData.images
         .map((img, i) =>
           img.url &&
@@ -1983,11 +1978,8 @@ export default function App() {
             : -1
         )
         .filter((i) => i !== -1);
-
       if (pendingIndices.length > 0) {
-        // 2. Identify Priority Indices (used in blocks)
         const usedIndices = new Set();
-
         formData.blocks?.forEach((block) => {
           const checkRef = (content) => {
             if (
@@ -2001,24 +1993,17 @@ export default function App() {
           checkRef(block.content);
           checkRef(block.content2);
         });
-
-        // 3. Select next index: Used ? Used : FirstPending
         let nextIndex = pendingIndices.find((idx) => usedIndices.has(idx));
-        if (nextIndex === undefined) {
-          nextIndex = pendingIndices[0];
-        }
+        if (nextIndex === undefined) nextIndex = pendingIndices[0];
 
         const loadNext = async () => {
           const idx = nextIndex;
           const imgObj = formData.images[idx];
           const realUrl = await fetchSingleImage(imgObj.id);
-
           if (realUrl) {
             setFormData((prev) => {
               const newImages = [...prev.images];
               newImages[idx] = { ...newImages[idx], url: realUrl };
-
-              // Update blocks
               const oldRef = `PENDING_REF_${idx}`;
               const newBlocks = prev.blocks.map((b) => {
                 const nb = { ...b };
@@ -2026,11 +2011,8 @@ export default function App() {
                 if (nb.content2 === oldRef) nb.content2 = realUrl;
                 return nb;
               });
-
-              // Update cover if needed
               let newCover = prev.coverImage;
               if (newCover === oldRef) newCover = realUrl;
-
               return {
                 ...prev,
                 images: newImages,
@@ -2039,7 +2021,6 @@ export default function App() {
               };
             });
           } else {
-            // Mark as failed to prevent infinite loop
             setFormData((prev) => {
               const newImages = [...prev.images];
               newImages[idx] = { ...newImages[idx], url: null };
@@ -2050,21 +2031,18 @@ export default function App() {
         loadNext();
       }
     }
-  }, [view, formData.images]); // blocks dependence implied by loop re-trigger, but strict dependency might be safer. Actually images change is the trigger.
+  }, [view, formData.images]);
 
-  // Actions
   const handleLogin = (e) => {
     e.preventDefault();
     const usernameInput = e.target.elements.username;
     const codeInput = e.target.elements.code;
     const name = usernameInput ? usernameInput.value : "";
     const code = codeInput ? codeInput.value : "";
-
     if (code !== "buzilove") {
       setLoginError("Falscher Geheimcode!");
       return;
     }
-
     if (name.trim() && user) {
       updateProfile(user, { displayName: name }).then(() => {
         setUser({ ...user, displayName: name });
@@ -2075,6 +2053,24 @@ export default function App() {
 
   const startCreate = () => {
     setEditingId(null);
+    const savedDraft = localStorage.getItem("buzi_draft_new");
+    if (savedDraft) {
+      try {
+        const parsed = JSON.parse(savedDraft);
+        if (
+          window.confirm(
+            "Es gibt einen ungespeicherten Entwurf für einen neuen Eintrag. Möchtest du ihn laden?"
+          )
+        ) {
+          setFormData(parsed);
+          setOriginalData(parsed);
+          setView("editor");
+          return;
+        } else {
+          localStorage.removeItem("buzi_draft_new");
+        }
+      } catch (e) {}
+    }
     const initial = {
       title: "",
       location: "",
@@ -2096,25 +2092,32 @@ export default function App() {
 
   const startEdit = (memory) => {
     setEditingId(memory.id);
-
-    // 1. Create Placeholder Images immediately
-    // We assign a special temporary URL so hydration works and BlockItem knows it's pending
+    const savedDraft = localStorage.getItem(`buzi_draft_${memory.id}`);
+    if (savedDraft) {
+      try {
+        const parsed = JSON.parse(savedDraft);
+        if (
+          window.confirm(
+            "Du hast ungespeicherte Änderungen an diesem Eintrag. Laden?"
+          )
+        ) {
+          setFormData(parsed);
+          setOriginalData(parsed);
+          setView("editor");
+          return;
+        } else {
+          localStorage.removeItem(`buzi_draft_${memory.id}`);
+        }
+      } catch (e) {}
+    }
     const initialImages = (memory.images || []).map((id, index) => {
-      // Handle legacy case
       if (typeof id === "string" && id.startsWith("data:"))
         return { id: null, url: id };
-
-      // Return placeholder.
-      // We use PENDING_REF_Index so we know which one is which later.
       return { id: id, url: `PENDING_REF_${index}` };
     });
-
-    // 2. Hydrate Blocks with Placeholders
-    // This will replace IMG_REF_0 with PENDING_REF_0 in the block content
     const editableBlocks = memory.blocks
       ? hydrateBlocks(memory.blocks, initialImages)
       : [{ id: 1, type: "text", content: memory.content || "" }];
-
     const data = {
       ...memory,
       images: initialImages,
@@ -2129,14 +2132,11 @@ export default function App() {
         : "",
       coverImage: memory.coverImage || "",
     };
-
     setFormData(data);
-    setOriginalData(data); // Original data has placeholders initially, but that's fine for "hasChanges" logic mostly
+    setOriginalData(data);
     setView("editor");
-    // Background loading happens in useEffect
   };
 
-  // Guard for leaving editor
   const handleExitEditor = () => {
     if (editingId && hasChanges) {
       if (
@@ -2149,40 +2149,26 @@ export default function App() {
     }
   };
 
-  // REF TO ACCESS LATEST STATE IN ASYNC FUNCTIONS
   const formDataRef = useRef(formData);
   useEffect(() => {
     formDataRef.current = formData;
   }, [formData]);
 
   const handleSave = async () => {
-    // WAIT FOR ONBLUR EVENTS TO PROPAGATE
-    // This fixes the race condition where the last typed character isn't saved yet
     await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // READ FROM REF TO GET LATEST STATE
     const currentData = formDataRef.current;
-
-    if (!currentData.title) return alert("Titel fehlt!");
+    if (!currentData.title) {
+      addToast("Titel fehlt! Bitte gib einen Titel ein.", "error");
+      return;
+    }
     setIsSaving(true);
     try {
-      // Logic for Cover Image (Source)
-      // Be careful: if it's still PENDING, we shouldn't save PENDING_REF to DB as preview
-      // But user shouldn't be able to save if loading? Or we just wait?
-      // Ideally we shouldn't save pending refs.
-
       const firstImageObj =
         currentData.images.length > 0 ? currentData.images[0] : null;
       let sourceImage = currentData.coverImage;
-
-      // If no cover set, use first image.
       if (!sourceImage && firstImageObj) {
         sourceImage = firstImageObj.url;
       }
-
-      // If sourceImage is PENDING, we can't generate a preview from it easily.
-      // Fallback: If still pending, use existing preview from memory if editing?
-      // For now, let's assume user waits or we ignore preview generation if pending.
 
       let previewImage = "";
       if (sourceImage && sourceImage.startsWith("data:")) {
@@ -2193,13 +2179,10 @@ export default function App() {
       }
 
       const imageIds = [];
-      // Improved loop to reuse existing IDs and only upload new images
       for (const imgObj of currentData.images) {
-        // Check if we have an existing ID (from editing) or it's a new upload (object with null id) or legacy string
         const isObj = typeof imgObj === "object";
         const existingId = isObj ? imgObj.id : null;
         const dataUrl = isObj ? imgObj.url : imgObj;
-
         if (existingId) {
           imageIds.push(existingId);
         } else if (dataUrl && dataUrl.startsWith("data:")) {
@@ -2217,12 +2200,10 @@ export default function App() {
           imageIds.push(assetDoc.id);
         }
       }
-
       const savedBlocks = dehydrateBlocks(
         currentData.blocks,
         currentData.images
       );
-
       const payload = {
         title: currentData.title,
         location: currentData.location,
@@ -2238,6 +2219,7 @@ export default function App() {
         blocks: savedBlocks,
         updatedAt: serverTimestamp(),
       };
+
       if (editingId) {
         await updateDoc(
           doc(db, "artifacts", appId, "public", "data", "memories", editingId),
@@ -2250,10 +2232,14 @@ export default function App() {
           payload
         );
       }
+
+      const draftKey = editingId ? `buzi_draft_${editingId}` : "buzi_draft_new";
+      localStorage.removeItem(draftKey);
       setView("home");
+      addToast("Erfolgreich gespeichert!", "success");
     } catch (err) {
       console.error(err);
-      alert("Fehler beim Speichern: " + err.message);
+      addToast("Fehler beim Speichern: " + err.message, "error");
     } finally {
       setIsSaving(false);
     }
@@ -2262,18 +2248,19 @@ export default function App() {
   const triggerDelete = () => {
     setShowDeleteConfirm(true);
   };
-
   const confirmDelete = async () => {
     setIsDeleting(true);
     try {
       await deleteDoc(
         doc(db, "artifacts", appId, "public", "data", "memories", editingId)
       );
+      localStorage.removeItem(`buzi_draft_${editingId}`);
       setShowDeleteConfirm(false);
       setView("home");
+      addToast("Eintrag gelöscht.", "info");
     } catch (error) {
       console.error("Fehler beim Löschen:", error);
-      alert("Fehler beim Löschen: " + error.message);
+      addToast("Fehler: " + error.message, "error");
     } finally {
       setIsDeleting(false);
     }
@@ -2314,324 +2301,337 @@ export default function App() {
       </div>
     );
 
-  if (view === "editor")
-    return (
-      <div className="min-h-screen bg-slate-50 flex flex-col">
-        <div className="bg-white border-b px-6 py-4 flex justify-between sticky top-0 z-50">
-          <div className="flex gap-4 items-center">
-            <Button variant="ghost" onClick={handleExitEditor}>
-              <ChevronLeft />
-            </Button>
-            <h2 className="font-bold">
-              {editingId ? "Eintrag bearbeiten" : "Neuer Eintrag"}
-            </h2>
+  return (
+    <div className="min-h-screen bg-[#fafaf9] relative">
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center pointer-events-none">
+        {toasts.map((t) => (
+          <div key={t.id} className="pointer-events-auto">
+            <Toast
+              message={t.msg}
+              type={t.type}
+              onClose={() => removeToast(t.id)}
+            />
           </div>
-          <div className="flex gap-3 items-center">
-            <div className="text-xs text-slate-400 mr-2 flex items-center gap-1">
-              <Database size={12} /> Bilder werden extern gespeichert
+        ))}
+      </div>
+
+      {view === "editor" ? (
+        <div className="min-h-screen bg-slate-50 flex flex-col">
+          <div className="bg-white border-b px-6 py-4 flex justify-between sticky top-0 z-50">
+            <div className="flex gap-4 items-center">
+              <Button variant="ghost" onClick={handleExitEditor}>
+                <ChevronLeft />
+              </Button>
+              <div className="flex flex-col">
+                <h2 className="font-bold">
+                  {editingId ? "Eintrag bearbeiten" : "Neuer Eintrag"}
+                </h2>
+                <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                  <Save size={10} /> Entwurf wird lokal gespeichert
+                </span>
+              </div>
             </div>
-            {editingId &&
-              (showDeleteConfirm ? (
-                <div className="flex items-center gap-2 bg-red-50 p-1 rounded-lg border border-red-100 animate-in fade-in slide-in-from-right-4">
-                  <span className="text-xs text-red-600 font-bold ml-2">
-                    Wirklich?
-                  </span>
-                  <button
-                    onClick={confirmDelete}
-                    disabled={isDeleting}
-                    className="bg-red-500 text-white p-1.5 rounded hover:bg-red-600 transition-colors"
-                  >
-                    {isDeleting ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : (
-                      <CheckCircle size={14} />
-                    )}
-                  </button>
-                  <button
-                    onClick={() => setShowDeleteConfirm(false)}
-                    className="bg-white text-slate-500 p-1.5 rounded border hover:bg-slate-50 transition-colors"
-                  >
-                    <XCircle size={14} />
-                  </button>
-                </div>
-              ) : (
-                <Button variant="danger" onClick={triggerDelete}>
-                  <Trash2 size={16} />
-                </Button>
-              ))}
-            <Button
-              variant="primary"
-              onClick={handleSave}
-              disabled={isSaving || (editingId && !hasChanges)}
-            >
-              {isSaving ? (
-                <>
-                  <Loader2 className="animate-spin mr-2" /> Speichere...
-                </>
-              ) : editingId ? (
-                "Änderungen speichern"
-              ) : (
-                "Veröffentlichen"
-              )}
-            </Button>
+            <div className="flex gap-3 items-center">
+              <div className="text-xs text-slate-400 mr-2 flex items-center gap-1">
+                <Database size={12} /> Bilder extern
+              </div>
+              {editingId &&
+                (showDeleteConfirm ? (
+                  <div className="flex items-center gap-2 bg-red-50 p-1 rounded-lg border border-red-100 animate-in fade-in slide-in-from-right-4">
+                    <span className="text-xs text-red-600 font-bold ml-2">
+                      Wirklich?
+                    </span>
+                    <button
+                      onClick={confirmDelete}
+                      disabled={isDeleting}
+                      className="bg-red-500 text-white p-1.5 rounded hover:bg-red-600 transition-colors"
+                    >
+                      {isDeleting ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <CheckCircle size={14} />
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setShowDeleteConfirm(false)}
+                      className="bg-white text-slate-500 p-1.5 rounded border hover:bg-slate-50 transition-colors"
+                    >
+                      <XCircle size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <Button variant="danger" onClick={triggerDelete}>
+                    <Trash2 size={16} />
+                  </Button>
+                ))}
+              <Button
+                variant="primary"
+                onClick={handleSave}
+                disabled={isSaving || (editingId && !hasChanges)}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="animate-spin mr-2" /> Speichere...
+                  </>
+                ) : editingId ? (
+                  "Speichern"
+                ) : (
+                  "Veröffentlichen"
+                )}
+              </Button>
+            </div>
           </div>
-        </div>
-        <div className="flex-1 flex flex-col lg:flex-row max-w-7xl mx-auto w-full p-6 gap-8">
-          <div className="w-full lg:w-2/3 space-y-8 pb-20">
-            <section className="bg-white p-6 rounded-2xl shadow-sm">
-              <div className="grid grid-cols-2 gap-4">
+          <div className="flex-1 flex flex-col lg:flex-row max-w-7xl mx-auto w-full p-6 gap-8">
+            <div className="w-full lg:w-2/3 space-y-8 pb-20">
+              <section className="bg-white p-6 rounded-2xl shadow-sm">
+                <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    label="Titel"
+                    value={formData.title}
+                    onChange={(e) =>
+                      setFormData({ ...formData, title: e.target.value })
+                    }
+                  />
+                  <div className="mb-4 w-full">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                        {formData.endDate ? "Zeitraum" : "Datum"}
+                      </label>
+                      <label className="flex items-center gap-2 text-xs font-medium text-slate-400 cursor-pointer hover:text-indigo-600">
+                        <input
+                          type="checkbox"
+                          className="accent-indigo-600 rounded"
+                          checked={!!formData.endDate}
+                          onChange={(e) => {
+                            setFormData({
+                              ...formData,
+                              endDate: e.target.checked ? formData.date : "",
+                            });
+                          }}
+                        />{" "}
+                        Zeitraum?
+                      </label>
+                    </div>
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <input
+                          type="date"
+                          value={formData.date}
+                          onChange={(e) =>
+                            setFormData({ ...formData, date: e.target.value })
+                          }
+                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all text-slate-700"
+                        />
+                      </div>
+                      {formData.endDate && (
+                        <>
+                          <div className="flex items-center text-slate-400">
+                            <ArrowRightIcon size={16} />
+                          </div>
+                          <div className="flex-1">
+                            <input
+                              type="date"
+                              value={formData.endDate}
+                              min={formData.date}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  endDate: e.target.value,
+                                })
+                              }
+                              className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all text-slate-700"
+                            />
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
                 <Input
-                  label="Titel"
-                  value={formData.title}
+                  label="Ort"
+                  value={formData.location}
                   onChange={(e) =>
-                    setFormData({ ...formData, title: e.target.value })
+                    setFormData({ ...formData, location: e.target.value })
                   }
                 />
-                {/* NEUES DATUMS-HANDLING MIT ZEITRAUM */}
-                <div className="mb-4 w-full">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
-                      {formData.endDate ? "Zeitraum" : "Datum"}
+              </section>
+              <section className="bg-white p-8 rounded-2xl shadow-sm ring-4 ring-slate-100">
+                <BlockEditor
+                  blocks={formData.blocks}
+                  onChange={(b) => setFormData({ ...formData, blocks: b })}
+                  uploadedImages={formData.images}
+                />
+              </section>
+              <section className="bg-white p-6 rounded-2xl shadow-sm">
+                <ImageManager
+                  images={formData.images}
+                  onChange={(i) => setFormData({ ...formData, images: i })}
+                  coverImage={formData.coverImage}
+                  onSetCover={(img) =>
+                    setFormData({ ...formData, coverImage: img })
+                  }
+                />
+              </section>
+            </div>
+            <div className="w-full lg:w-1/3 space-y-6">
+              <section className="bg-white p-6 rounded-2xl shadow-lg sticky top-24">
+                <h3 className="text-xs font-bold text-slate-400 uppercase mb-4 flex items-center gap-2">
+                  <Palette size={14} /> Design
+                </h3>
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-2">
+                      Akzentfarbe
                     </label>
-                    <label className="flex items-center gap-2 text-xs font-medium text-slate-400 cursor-pointer hover:text-indigo-600">
-                      <input
-                        type="checkbox"
-                        className="accent-indigo-600 rounded"
-                        checked={!!formData.endDate}
-                        onChange={(e) => {
-                          setFormData({
-                            ...formData,
-                            endDate: e.target.checked ? formData.date : "",
-                          });
-                        }}
-                      />
-                      Zeitraum?
-                    </label>
-                  </div>
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <input
-                        type="date"
-                        value={formData.date}
-                        onChange={(e) =>
-                          setFormData({ ...formData, date: e.target.value })
-                        }
-                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all text-slate-700"
-                      />
+                    <div className="flex gap-2 flex-wrap">
+                      {ACCENT_COLORS.map((c) => (
+                        <button
+                          key={c.id}
+                          onClick={() =>
+                            setFormData({ ...formData, accentColor: c.id })
+                          }
+                          className={`w-8 h-8 rounded-full transition-all ${
+                            formData.accentColor === c.id
+                              ? "ring-2 ring-offset-2 ring-slate-400 scale-110"
+                              : "hover:scale-105"
+                          }`}
+                          style={{ backgroundColor: c.hex }}
+                          title={c.name}
+                        />
+                      ))}
                     </div>
-                    {formData.endDate && (
-                      <>
-                        <div className="flex items-center text-slate-400">
-                          <ArrowRightIcon size={16} />
-                        </div>
-                        <div className="flex-1">
-                          <input
-                            type="date"
-                            value={formData.endDate}
-                            min={formData.date}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                endDate: e.target.value,
-                              })
-                            }
-                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all text-slate-700"
-                          />
-                        </div>
-                      </>
-                    )}
                   </div>
-                </div>
-              </div>
-              <Input
-                label="Ort"
-                value={formData.location}
-                onChange={(e) =>
-                  setFormData({ ...formData, location: e.target.value })
-                }
-              />
-            </section>
-            <section className="bg-white p-8 rounded-2xl shadow-sm ring-4 ring-slate-100">
-              <BlockEditor
-                blocks={formData.blocks}
-                onChange={(b) => setFormData({ ...formData, blocks: b })}
-                uploadedImages={formData.images}
-              />
-            </section>
-            <section className="bg-white p-6 rounded-2xl shadow-sm">
-              <ImageManager
-                images={formData.images}
-                onChange={(i) => setFormData({ ...formData, images: i })}
-                coverImage={formData.coverImage}
-                onSetCover={(img) =>
-                  setFormData({ ...formData, coverImage: img })
-                }
-              />
-            </section>
-          </div>
-          <div className="w-full lg:w-1/3 space-y-6">
-            <section className="bg-white p-6 rounded-2xl shadow-lg sticky top-24">
-              <h3 className="text-xs font-bold text-slate-400 uppercase mb-4 flex items-center gap-2">
-                <Palette size={14} /> Design
-              </h3>
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-2">
-                    Akzentfarbe
-                  </label>
-                  <div className="flex gap-2 flex-wrap">
-                    {ACCENT_COLORS.map((c) => (
-                      <button
-                        key={c.id}
-                        onClick={() =>
-                          setFormData({ ...formData, accentColor: c.id })
-                        }
-                        className={`w-8 h-8 rounded-full transition-all ${
-                          formData.accentColor === c.id
-                            ? "ring-2 ring-offset-2 ring-slate-400 scale-110"
-                            : "hover:scale-105"
-                        }`}
-                        style={{ backgroundColor: c.hex }}
-                        title={c.name}
-                      />
-                    ))}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-2">
+                      Hintergrund
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {BG_STYLES.map((s) => (
+                        <button
+                          key={s.id}
+                          onClick={() =>
+                            setFormData({ ...formData, bgStyle: s.id })
+                          }
+                          className={`h-12 rounded-lg border flex items-center justify-center text-[10px] font-bold uppercase transition-all ${
+                            formData.bgStyle === s.id
+                              ? "ring-2 ring-indigo-500 border-transparent"
+                              : "hover:border-slate-300"
+                          }`}
+                        >
+                          <div
+                            className={`w-full h-full rounded-md ${
+                              s.id === "soft"
+                                ? "bg-gradient-to-br from-white via-slate-100 to-white"
+                                : s.id === "mesh"
+                                ? "bg-indigo-50"
+                                : "bg-white"
+                            }`}
+                          ></div>
+                          <span className="absolute">{s.name}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-2">
-                    Hintergrund
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {BG_STYLES.map((s) => (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-2">
+                      Titelbild
+                    </label>
+                    <div className="flex gap-2">
                       <button
-                        key={s.id}
                         onClick={() =>
-                          setFormData({ ...formData, bgStyle: s.id })
+                          setFormData({ ...formData, heroStyle: "compact" })
                         }
-                        className={`h-12 rounded-lg border flex items-center justify-center text-[10px] font-bold uppercase transition-all ${
-                          formData.bgStyle === s.id
-                            ? "ring-2 ring-indigo-500 border-transparent"
-                            : "hover:border-slate-300"
+                        className={`flex-1 p-2 border rounded-lg flex flex-col items-center gap-2 ${
+                          formData.heroStyle === "compact"
+                            ? "bg-indigo-50 border-indigo-500 text-indigo-700"
+                            : "hover:bg-slate-50"
                         }`}
                       >
-                        <div
-                          className={`w-full h-full rounded-md ${
-                            s.id === "soft"
-                              ? "bg-gradient-to-br from-white via-slate-100 to-white"
-                              : s.id === "mesh"
-                              ? "bg-indigo-50"
-                              : "bg-white"
-                          }`}
-                        ></div>
-                        <span className="absolute">{s.name}</span>
+                        <div className="w-full h-8 bg-slate-200 rounded-md"></div>
+                        <span className="text-[10px] font-bold">Kompakt</span>
                       </button>
-                    ))}
+                      <button
+                        onClick={() =>
+                          setFormData({ ...formData, heroStyle: "full" })
+                        }
+                        className={`flex-1 p-2 border rounded-lg flex flex-col items-center gap-2 ${
+                          formData.heroStyle === "full"
+                            ? "bg-indigo-50 border-indigo-500 text-indigo-700"
+                            : "hover:bg-slate-50"
+                        }`}
+                      >
+                        <div className="w-full h-8 bg-slate-800 rounded-md"></div>
+                        <span className="text-[10px] font-bold">Vollbild</span>
+                      </button>
+                    </div>
+                  </div>
+                  <div className="border-t pt-4">
+                    <label className="block text-xs font-bold text-slate-500 mb-2">
+                      Karten-Stil (Vorschau)
+                    </label>
+                    <ThemeSelector
+                      selected={formData.theme}
+                      onSelect={(t) => setFormData({ ...formData, theme: t })}
+                    />
                   </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-2">
-                    Titelbild
-                  </label>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() =>
-                        setFormData({ ...formData, heroStyle: "compact" })
-                      }
-                      className={`flex-1 p-2 border rounded-lg flex flex-col items-center gap-2 ${
-                        formData.heroStyle === "compact"
-                          ? "bg-indigo-50 border-indigo-500 text-indigo-700"
-                          : "hover:bg-slate-50"
-                      }`}
-                    >
-                      <div className="w-full h-8 bg-slate-200 rounded-md"></div>
-                      <span className="text-[10px] font-bold">Kompakt</span>
-                    </button>
-                    <button
-                      onClick={() =>
-                        setFormData({ ...formData, heroStyle: "full" })
-                      }
-                      className={`flex-1 p-2 border rounded-lg flex flex-col items-center gap-2 ${
-                        formData.heroStyle === "full"
-                          ? "bg-indigo-50 border-indigo-500 text-indigo-700"
-                          : "hover:bg-slate-50"
-                      }`}
-                    >
-                      <div className="w-full h-8 bg-slate-800 rounded-md"></div>
-                      <span className="text-[10px] font-bold">Vollbild</span>
-                    </button>
-                  </div>
-                </div>
-                <div className="border-t pt-4">
-                  <label className="block text-xs font-bold text-slate-500 mb-2">
-                    Karten-Stil (Vorschau)
-                  </label>
-                  <ThemeSelector
-                    selected={formData.theme}
-                    onSelect={(t) => setFormData({ ...formData, theme: t })}
-                  />
-                </div>
-              </div>
-            </section>
+              </section>
+            </div>
           </div>
         </div>
-      </div>
-    );
-
-  if (view === "detail")
-    return (
-      <MemoryDetail
-        memory={selectedMemory}
-        onBack={() => setView("home")}
-        onEdit={startEdit}
-        isAuthor={true}
-      />
-    );
-
-  return (
-    <div className="min-h-screen bg-[#fafaf9]">
-      <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur border-b px-6 h-20 flex items-center justify-between">
-        <div
-          onClick={() => setView("home")}
-          className="flex items-center gap-2 cursor-pointer"
-        >
-          <Sparkles className="text-indigo-600" />
-          <span className="font-serif text-xl font-bold text-slate-800">
-            BUZI Tagebuch
-          </span>
-        </div>
-        <Button onClick={startCreate}>
-          <Plus size={18} /> Neu
-        </Button>
-      </nav>
-      <main className="max-w-6xl mx-auto p-6 pt-12">
-        <header className="mb-16 text-center max-w-2xl mx-auto">
-          <h2 className="text-5xl font-serif text-slate-900 mb-6">
-            Unsere Stories
-          </h2>
-          <p className="text-lg text-slate-500 leading-relaxed">
-            Das geheime Archiv für unsere Insider, Abenteuer und alles, was wir
-            nicht vergessen wollen.
-          </p>
-        </header>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {memories.map((mem) => (
-            <MemoryCard
-              key={mem.id}
-              memory={mem}
-              onClick={() => openDetail(mem)}
-            />
-          ))}
-        </div>
-        {memories.length === 0 && (
-          <div className="text-center py-20 border-2 border-dashed border-slate-200 rounded-3xl mt-8">
-            <p className="text-slate-400 mb-4">Noch gähnende Leere hier.</p>
-            <Button variant="secondary" onClick={startCreate}>
-              Trau dich Buzi
+      ) : view === "detail" ? (
+        <MemoryDetail
+          memory={selectedMemory}
+          onBack={() => setView("home")}
+          onEdit={startEdit}
+          isAuthor={true}
+        />
+      ) : (
+        <div>
+          <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur border-b px-6 h-20 flex items-center justify-between">
+            <div
+              onClick={() => setView("home")}
+              className="flex items-center gap-2 cursor-pointer"
+            >
+              <Sparkles className="text-indigo-600" />
+              <span className="font-serif text-xl font-bold text-slate-800">
+                BUZI Tagebuch
+              </span>
+            </div>
+            <Button onClick={startCreate}>
+              <Plus size={18} /> Neu
             </Button>
-          </div>
-        )}
-      </main>
+          </nav>
+          <main className="max-w-6xl mx-auto p-6 pt-12">
+            <header className="mb-16 text-center max-w-2xl mx-auto">
+              <h2 className="text-5xl font-serif text-slate-900 mb-6">
+                Unsere Stories
+              </h2>
+              <p className="text-lg text-slate-500 leading-relaxed">
+                Das geheime Archiv für unsere Insider, Abenteuer und alles, was
+                wir nicht vergessen wollen.
+              </p>
+            </header>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {memories.map((mem) => (
+                <MemoryCard
+                  key={mem.id}
+                  memory={mem}
+                  onClick={() => openDetail(mem)}
+                />
+              ))}
+            </div>
+            {memories.length === 0 && (
+              <div className="text-center py-20 border-2 border-dashed border-slate-200 rounded-3xl mt-8">
+                <p className="text-slate-400 mb-4">Noch gähnende Leere hier.</p>
+                <Button variant="secondary" onClick={startCreate}>
+                  Trau dich Buzi
+                </Button>
+              </div>
+            )}
+          </main>
+        </div>
+      )}
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500;600&family=Caveat:wght@400;700&display=swap'); .font-serif { font-family: 'Playfair Display', serif; } .font-handwriting { font-family: 'Caveat', cursive; } body { font-family: 'Inter', sans-serif; } .animate-fade-in { animation: fadeIn 0.3s forwards; } @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } } .animate-slide-up { animation: slideUp 1s forwards; } @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }`}</style>
     </div>
   );
