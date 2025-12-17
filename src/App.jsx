@@ -825,6 +825,7 @@ const InteractiveMap = ({ memories, onNavigate }) => {
 
     // --- MOUSE HANDLERS ---
     const onMouseDown = (e) => {
+      if (e.target.closest(".map-popup")) return;
       e.preventDefault();
       isDragging = true;
       startX = e.clientX;
@@ -876,6 +877,7 @@ const InteractiveMap = ({ memories, onNavigate }) => {
 
     // --- TOUCH HANDLERS (Native for passive: false) ---
     const onTouchStart = (e) => {
+      if (e.target.closest(".map-popup")) return;
       if (e.touches.length === 1) {
         isDragging = true;
         isPinching = false;
@@ -895,6 +897,7 @@ const InteractiveMap = ({ memories, onNavigate }) => {
     };
 
     const onTouchMove = (e) => {
+      if (e.target.closest(".map-popup")) return;
       e.preventDefault();
       if (isDragging && e.touches.length === 1) {
         const dx = e.touches[0].clientX - startX;
@@ -950,6 +953,7 @@ const InteractiveMap = ({ memories, onNavigate }) => {
     };
 
     const onWheel = (e) => {
+      if (e.target.closest(".map-popup")) return;
       e.preventDefault();
       const delta = -e.deltaY;
       const speed = e.ctrlKey ? 0.01 : 0.002;
@@ -1225,7 +1229,8 @@ const InteractiveMap = ({ memories, onNavigate }) => {
 
         {selectedLoc && (
           <div
-            className="absolute bottom-8 left-1/2 -translate-x-1/2 w-[90%] max-w-sm bg-white rounded-2xl shadow-2xl z-50 overflow-hidden animate-in slide-in-from-bottom-4 fade-in"
+            className="absolute bottom-8 left-1/2 -translate-x-1/2 w-[90%] max-w-sm bg-white rounded-2xl shadow-2xl z-50 overflow-hidden animate-in slide-in-from-bottom-4 fade-in map-popup"
+            style={{ touchAction: "pan-y" }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="bg-indigo-600 p-3 flex justify-between items-start text-white shadow-md">
