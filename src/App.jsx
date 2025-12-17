@@ -50,10 +50,7 @@ import {
   Palette,
   Minus,
   Quote,
-  PanelLeft,
-  PanelRight,
   Maximize,
-  BoxSelect,
   Columns,
   Database,
   ZoomIn,
@@ -72,11 +69,9 @@ import {
   Map as MapIcon,
   Grid,
   Globe,
-  Minus as MinusIcon,
-  Plus as PlusIcon,
   Navigation,
   Calendar,
-  ArrowRight as ArrowRightIcon,
+  ArrowRight,
 } from "lucide-react";
 
 // --- Firebase Konfiguration ---
@@ -581,7 +576,7 @@ const MapTile = React.memo(({ src, style }) => (
   <img
     src={src}
     style={style}
-    className="select-none grayscale-[0.2] contrast-[1.05]"
+    className="select-none grayscale-[0.2] contrast-[1.05] absolute"
     alt=""
     draggable={false}
     onDragStart={(e) => e.preventDefault()}
@@ -590,7 +585,7 @@ const MapTile = React.memo(({ src, style }) => (
 
 const InteractiveMap = ({ memories, onNavigate }) => {
   const [center, setCenter] = useState({ lat: 51.1657, lng: 10.4515 });
-  const [zoom, setZoom] = useState(5.5);
+  const [zoom, setZoom] = useState(6); // START-ZOOM AUF GANZZAHL GEÄNDERT
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [fetchedCoords, setFetchedCoords] = useState({});
   const [selectedLoc, setSelectedLoc] = useState(null);
@@ -599,10 +594,7 @@ const InteractiveMap = ({ memories, onNavigate }) => {
   const contentRef = useRef(null);
 
   // Use a ref to store current state for event listeners to avoid stale closures
-  const stateRef = useRef({
-    zoom: 5.5,
-    center: { lat: 51.1657, lng: 10.4515 },
-  });
+  const stateRef = useRef({ zoom: 6, center: { lat: 51.1657, lng: 10.4515 } });
 
   useEffect(() => {
     stateRef.current = { zoom, center };
@@ -712,9 +704,6 @@ const InteractiveMap = ({ memories, onNavigate }) => {
     return { lat, lng };
   }, []);
 
-  // Map Vars
-  const tileZoom = Math.floor(zoom);
-  const scale = Math.pow(2, zoom - tileZoom);
   const centerPx = project(center.lat, center.lng, zoom);
   const worldWidth = 256 * Math.pow(2, zoom);
 
@@ -842,9 +831,18 @@ const InteractiveMap = ({ memories, onNavigate }) => {
         // Since touch is gone, we rely on the transform currently applied
         if (contentRef.current) {
           const style = window.getComputedStyle(contentRef.current);
-          const matrix = new WebKitCSSMatrix(style.transform);
-          const dx = matrix.m41;
-          const dy = matrix.m42;
+          // Safe matrix fallback
+          let dx = 0,
+            dy = 0;
+          try {
+            const matrix = new (window.DOMMatrix || window.WebKitCSSMatrix)(
+              style.transform
+            );
+            dx = matrix.m41;
+            dy = matrix.m42;
+          } catch (err) {
+            // Fallback if matrix parsing fails
+          }
 
           if (Math.abs(dx) > 0 || Math.abs(dy) > 0) {
             const currZ = stateRef.current.zoom;
@@ -898,59 +896,81 @@ const InteractiveMap = ({ memories, onNavigate }) => {
 
   // --- Rendering ---
 
-  const tiles = useMemo(() => {
-    if (dimensions.width === 0) return [];
+  // Helper to generate tiles for a specific zoom level
+  const getTilesForZoom = useCallback(
+    (targetZoom) => {
+      if (dimensions.width === 0) return [];
 
-    const t = [];
-    const centerPxInt = project(center.lat, center.lng, tileZoom);
+      // KORREKTUR: Math.round sorgt dafür, dass wir eher runter-skalieren (scharf)
+      // als hoch-skalieren (unscharf)
+      const tileZoom = Math.round(targetZoom);
 
-    const viewLeftInt = centerPxInt.x - dimensions.width / 2 / scale;
-    const viewTopInt = centerPxInt.y - dimensions.height / 2 / scale;
-    const viewRightInt = centerPxInt.x + dimensions.width / 2 / scale;
-    const viewBottomInt = centerPxInt.y + dimensions.height / 2 / scale;
+      // Scale factor berechnen. Wenn targetZoom 5.9 ist, tileZoom 6.
+      // Scale = 2^(5.9 - 6) = 2^(-0.1) = ~0.93 (verkleinert -> scharf)
+      const scale = Math.pow(2, zoom - tileZoom);
 
-    const minX = Math.floor(viewLeftInt / TILE_SIZE) - 1; // Buffer
-    const maxX = Math.floor(viewRightInt / TILE_SIZE) + 1;
-    const minY = Math.floor(viewTopInt / TILE_SIZE) - 1;
-    const maxY = Math.floor(viewBottomInt / TILE_SIZE) + 1;
-    const maxTiles = Math.pow(2, tileZoom);
+      const centerPxInt = project(center.lat, center.lng, tileZoom);
 
-    for (let x = minX; x <= maxX; x++) {
-      for (let y = minY; y <= maxY; y++) {
-        if (y < 0 || y >= maxTiles) continue;
+      const viewLeftInt = centerPxInt.x - dimensions.width / 2 / scale;
+      const viewTopInt = centerPxInt.y - dimensions.height / 2 / scale;
+      const viewRightInt = centerPxInt.x + dimensions.width / 2 / scale;
+      const viewBottomInt = centerPxInt.y + dimensions.height / 2 / scale;
 
-        const tileX = ((x % maxTiles) + maxTiles) % maxTiles;
-        const left = (x * TILE_SIZE - viewLeftInt) * scale;
-        const top = (y * TILE_SIZE - viewTopInt) * scale;
+      const minX = Math.floor(viewLeftInt / TILE_SIZE) - 1;
+      const maxX = Math.floor(viewRightInt / TILE_SIZE) + 1;
+      const minY = Math.floor(viewTopInt / TILE_SIZE) - 1;
+      const maxY = Math.floor(viewBottomInt / TILE_SIZE) + 1;
+      const maxTiles = Math.pow(2, tileZoom);
 
-        t.push({
-          key: `${tileZoom}-${x}-${y}`,
-          src: `https://tile.openstreetmap.org/${tileZoom}/${tileX}/${y}.png`,
-          style: {
-            position: "absolute",
-            left: left,
-            top: top,
-            width: Math.ceil(TILE_SIZE * scale),
-            height: Math.ceil(TILE_SIZE * scale),
-          },
-        });
+      const t = [];
+      for (let x = minX; x <= maxX; x++) {
+        for (let y = minY; y <= maxY; y++) {
+          if (y < 0 || y >= maxTiles) continue;
+
+          const tileX = ((x % maxTiles) + maxTiles) % maxTiles;
+          const left = (x * TILE_SIZE - viewLeftInt) * scale;
+          const top = (y * TILE_SIZE - viewTopInt) * scale;
+
+          t.push({
+            key: `${tileZoom}-${x}-${y}`,
+            src: `https://tile.openstreetmap.org/${tileZoom}/${tileX}/${y}.png`,
+            style: {
+              left: left,
+              top: top,
+              width: Math.ceil(TILE_SIZE * scale),
+              height: Math.ceil(TILE_SIZE * scale),
+              transform: "translate3d(0,0,0)", // HWA
+              backfaceVisibility: "hidden",
+            },
+          });
+        }
       }
-    }
-    return t;
-  }, [center, zoom, dimensions, tileZoom, scale, project]);
+      return t;
+    },
+    [center, zoom, dimensions, project]
+  );
+
+  // Primary layer (current integer zoom)
+  const primaryTiles = useMemo(
+    () => getTilesForZoom(zoom),
+    [getTilesForZoom, zoom]
+  );
+
+  // Fallback layer (zoom - 1) to prevent flickering when zooming in/out
+  const fallbackTiles = useMemo(() => {
+    // Use integer zoom for fallback as well to match grid
+    const z = Math.round(zoom) - 1;
+    return z >= 0 ? getTilesForZoom(z) : [];
+  }, [getTilesForZoom, zoom]);
 
   const markers = locationData.mapped.map((loc, i) => {
     const markerPx = project(loc.lat, loc.lng, zoom);
     let deltaX = markerPx.x - centerPx.x;
-
     while (deltaX > worldWidth / 2) deltaX -= worldWidth;
     while (deltaX < -worldWidth / 2) deltaX += worldWidth;
-
     const x = dimensions.width / 2 + deltaX;
     const y = markerPx.y - (centerPx.y - dimensions.height / 2);
 
-    // Increase buffer area significantly to prevent pins flickering when near edges
-    // Pins might stick out of the visible map area
     if (
       x < -200 ||
       x > dimensions.width + 200 ||
@@ -1024,18 +1044,23 @@ const InteractiveMap = ({ memories, onNavigate }) => {
       <div
         ref={containerRef}
         className="flex-1 relative overflow-hidden cursor-grab active:cursor-grabbing bg-[#cad2d3]"
-        style={{ touchAction: "none" }} // Critical for touch handling
+        style={{ touchAction: "none" }}
         onClick={() => setSelectedLoc(null)}
       >
         <div ref={contentRef} className="absolute inset-0 w-full h-full">
-          {/* Tiles */}
-          {tiles.map((t) => (
+          {/* Render Fallback Layer First (Behind) */}
+          {fallbackTiles.map((t) => (
+            <MapTile key={`fb-${t.key}`} {...t} />
+          ))}
+          {/* Render Primary Layer (Top) */}
+          {primaryTiles.map((t) => (
             <MapTile key={t.key} {...t} />
           ))}
-          {/* Markers */}
+
           {markers}
         </div>
 
+        {/* ... controls & overlay ... */}
         <div className="absolute bottom-1 right-1 bg-white/70 px-1 text-[10px] text-slate-600 pointer-events-none z-10 rounded">
           © OpenStreetMap contributors
         </div>
@@ -1048,7 +1073,7 @@ const InteractiveMap = ({ memories, onNavigate }) => {
             }}
             className="bg-white p-2 rounded-xl shadow-lg hover:bg-slate-50 text-slate-700"
           >
-            <PlusIcon size={20} />
+            <Plus size={20} />
           </button>
           <button
             onClick={(e) => {
@@ -1057,7 +1082,7 @@ const InteractiveMap = ({ memories, onNavigate }) => {
             }}
             className="bg-white p-2 rounded-xl shadow-lg hover:bg-slate-50 text-slate-700"
           >
-            <MinusIcon size={20} />
+            <Minus size={20} />
           </button>
           <button
             onClick={(e) => {
@@ -1319,7 +1344,7 @@ const BlockItem = React.memo(
                 }`}
                 title="Bild Links + Text"
               >
-                <PanelLeft size={12} />
+                <AlignLeft size={12} />
               </button>
               <button
                 onClick={() => updateBlock(block.id, { layout: "center" })}
@@ -1329,7 +1354,7 @@ const BlockItem = React.memo(
                     : "text-slate-400"
                 }`}
               >
-                <BoxSelect size={12} />
+                <Maximize size={12} />
               </button>
               <button
                 onClick={() => updateBlock(block.id, { layout: "right" })}
@@ -1340,7 +1365,7 @@ const BlockItem = React.memo(
                 }`}
                 title="Bild Rechts + Text"
               >
-                <PanelRight size={12} />
+                <AlignRight size={12} />
               </button>
               <button
                 onClick={() => updateBlock(block.id, { layout: "full" })}
@@ -1350,7 +1375,7 @@ const BlockItem = React.memo(
                     : "text-slate-400"
                 }`}
               >
-                <Maximize size={12} />
+                <Maximize2 size={12} />
               </button>
             </div>
           )}
@@ -3071,7 +3096,7 @@ export default function App() {
                       {formData.endDate && (
                         <>
                           <div className="flex items-center text-slate-400">
-                            <ArrowRightIcon size={16} />
+                            <ArrowRight size={16} />
                           </div>
                           <div className="flex-1">
                             <input
