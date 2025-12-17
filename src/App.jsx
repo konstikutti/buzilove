@@ -480,6 +480,97 @@ const Input = ({
   </div>
 );
 
+// --- NEW COMPONENT: Address Autocomplete ---
+const AddressAutocomplete = ({ value, onChange, label, placeholder }) => {
+  const [suggestions, setSuggestions] = useState([]);
+  const [isOpen, setIsOpen] = useState(false);
+  const wrapperRef = useRef(null);
+  const timerRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const fetchSuggestions = async (query) => {
+    if (!query || query.length < 3) return;
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+          query
+        )}&addressdetails=1&limit=5`
+      );
+      const data = await response.json();
+      setSuggestions(data);
+      setIsOpen(true);
+    } catch (e) {
+      console.warn("Autocomplete fetch error", e);
+    }
+  };
+
+  const handleInputChange = (e) => {
+    const val = e.target.value;
+    onChange(e);
+
+    if (timerRef.current) clearTimeout(timerRef.current);
+
+    if (val.length > 2) {
+      timerRef.current = setTimeout(() => {
+        fetchSuggestions(val);
+      }, 500);
+    } else {
+      setSuggestions([]);
+      setIsOpen(false);
+    }
+  };
+
+  const handleSelect = (item) => {
+    onChange({ target: { value: item.display_name } });
+    setSuggestions([]);
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="mb-4 w-full relative" ref={wrapperRef}>
+      {label && (
+        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+          {label}
+        </label>
+      )}
+      <input
+        type="text"
+        value={value}
+        onChange={handleInputChange}
+        placeholder={placeholder}
+        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all text-slate-700"
+        autoComplete="off"
+      />
+      {isOpen && suggestions.length > 0 && (
+        <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden max-h-60 overflow-y-auto">
+          {suggestions.map((s) => (
+            <div
+              key={s.place_id}
+              onClick={() => handleSelect(s)}
+              className="px-4 py-3 hover:bg-indigo-50 cursor-pointer text-sm text-slate-700 border-b last:border-0 border-slate-50 flex items-start gap-2"
+            >
+              <MapPin
+                size={16}
+                className="text-indigo-400 mt-0.5 flex-shrink-0"
+              />
+              <span className="leading-snug">{s.display_name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const DraggableImage = ({
   src,
   position = "center",
@@ -585,7 +676,7 @@ const MapTile = React.memo(({ src, style }) => (
 
 const InteractiveMap = ({ memories, onNavigate }) => {
   const [center, setCenter] = useState({ lat: 51.1657, lng: 10.4515 });
-  const [zoom, setZoom] = useState(6); // START-ZOOM AUF GANZZAHL GEÄNDERT
+  const [zoom, setZoom] = useState(6);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [fetchedCoords, setFetchedCoords] = useState({});
   const [selectedLoc, setSelectedLoc] = useState(null);
@@ -593,7 +684,6 @@ const InteractiveMap = ({ memories, onNavigate }) => {
   const containerRef = useRef(null);
   const contentRef = useRef(null);
 
-  // Use a ref to store current state for event listeners to avoid stale closures
   const stateRef = useRef({ zoom: 6, center: { lat: 51.1657, lng: 10.4515 } });
 
   useEffect(() => {
@@ -633,54 +723,59 @@ const InteractiveMap = ({ memories, onNavigate }) => {
   };
 
   const locationData = useMemo(() => {
-    const data = {};
+    const mapped = [];
     const unmapped = [];
+
+    // Step 1: Process each memory individually to find a coordinate source
     memories.forEach((mem) => {
-      if (!mem.location) return;
-      const normalizedName = mem.location.trim();
+      // Prioritize explicit address (private) over location (public)
+      const queryName = mem.address || mem.location;
+
+      if (!queryName) return;
+      const normalizedName = queryName.trim();
+
       const cached =
         CITY_COORDS[normalizedName] || fetchedCoords[normalizedName];
       const coords = getCoordinates(normalizedName) || cached;
 
       if (coords) {
-        const key = `${coords.lat},${coords.lng}`;
-        if (!data[key]) {
-          data[key] = { ...coords, name: mem.location, memories: [] };
-        }
-        data[key].memories.push(mem);
-        if (data[key].memories.length === 1) data[key].name = mem.location;
+        // Create a temporary object for every memory with its coords
+        mapped.push({
+          lat: coords.lat,
+          lng: coords.lng,
+          memory: mem,
+          // Use display location for the name in the marker logic
+          displayName: mem.location,
+        });
       } else {
-        const existing = unmapped.find((u) => u.name === mem.location);
-        if (existing) {
-          existing.memories.push(mem);
-        } else {
-          unmapped.push({ name: mem.location, memories: [mem] });
+        const existing = unmapped.find((u) => u.name === normalizedName);
+        if (!existing) {
+          unmapped.push({ name: normalizedName, memories: [mem] });
         }
       }
     });
 
-    Object.values(data).forEach((loc) => {
-      loc.memories.sort((a, b) => getDateObj(b.date) - getDateObj(a.date));
-      loc.count = loc.memories.length;
-    });
-
-    return { mapped: Object.values(data), unmapped };
+    return { mapped, unmapped };
   }, [memories, fetchedCoords]);
 
+  // Fetch unmapped locations
   useEffect(() => {
     const unmappedNames = locationData.unmapped.map((u) => u.name);
     if (unmappedNames.length === 0) return;
+
     const fetchNext = async () => {
       const target = unmappedNames.find(
         (name) => fetchedCoords[name] === undefined
       );
       if (!target) return;
-      setFetchedCoords((prev) => ({ ...prev, [target]: null }));
+
+      setFetchedCoords((prev) => ({ ...prev, [target]: null })); // Mark as fetching/failed
       const coords = await geocodeLocation(target);
       if (coords) {
         setFetchedCoords((prev) => ({ ...prev, [target]: coords }));
       }
     };
+
     const timer = setTimeout(fetchNext, 1000);
     return () => clearTimeout(timer);
   }, [locationData.unmapped, fetchedCoords]);
@@ -730,9 +825,7 @@ const InteractiveMap = ({ memories, onNavigate }) => {
 
     // --- MOUSE HANDLERS ---
     const onMouseDown = (e) => {
-      // Prevent default browser drag behavior (ghost image)
       e.preventDefault();
-
       isDragging = true;
       startX = e.clientX;
       startY = e.clientY;
@@ -784,7 +877,6 @@ const InteractiveMap = ({ memories, onNavigate }) => {
     // --- TOUCH HANDLERS (Native for passive: false) ---
     const onTouchStart = (e) => {
       if (e.touches.length === 1) {
-        // Drag Start
         isDragging = true;
         isPinching = false;
         startX = e.touches[0].clientX;
@@ -794,17 +886,16 @@ const InteractiveMap = ({ memories, onNavigate }) => {
         startCenterPx = project(currC.lat, currC.lng, currZ);
         if (contentRef.current) contentRef.current.style.transition = "none";
       } else if (e.touches.length === 2) {
-        // Pinch Start
         isPinching = true;
         isDragging = false;
         initialDist = getDistance(e.touches);
         initialZoom = stateRef.current.zoom;
-        e.preventDefault(); // Stop browser zoom
+        e.preventDefault();
       }
     };
 
     const onTouchMove = (e) => {
-      e.preventDefault(); // Stop browser scrolling/zooming entirely within map
+      e.preventDefault();
       if (isDragging && e.touches.length === 1) {
         const dx = e.touches[0].clientX - startX;
         const dy = e.touches[0].clientY - startY;
@@ -815,7 +906,6 @@ const InteractiveMap = ({ memories, onNavigate }) => {
         const dist = getDistance(e.touches);
         if (initialDist > 0) {
           const ratio = dist / initialDist;
-          // Simple logarithmic scaling for zoom
           const zoomDelta = Math.log2(ratio);
           let newZoom = initialZoom + zoomDelta;
           newZoom = Math.max(2, Math.min(newZoom, 19));
@@ -826,12 +916,8 @@ const InteractiveMap = ({ memories, onNavigate }) => {
 
     const onTouchEnd = (e) => {
       if (isDragging && e.touches.length === 0) {
-        // Commit drag
-        // We need to calculate dx/dy based on the LAST touch position vs start
-        // Since touch is gone, we rely on the transform currently applied
         if (contentRef.current) {
           const style = window.getComputedStyle(contentRef.current);
-          // Safe matrix fallback
           let dx = 0,
             dy = 0;
           try {
@@ -840,9 +926,7 @@ const InteractiveMap = ({ memories, onNavigate }) => {
             );
             dx = matrix.m41;
             dy = matrix.m42;
-          } catch (err) {
-            // Fallback if matrix parsing fails
-          }
+          } catch (err) {}
 
           if (Math.abs(dx) > 0 || Math.abs(dy) > 0) {
             const currZ = stateRef.current.zoom;
@@ -865,15 +949,10 @@ const InteractiveMap = ({ memories, onNavigate }) => {
       }
     };
 
-    // --- WHEEL HANDLER ---
     const onWheel = (e) => {
-      e.preventDefault(); // Always prevent default to stop page scroll/zoom
+      e.preventDefault();
       const delta = -e.deltaY;
-
-      // Check for trackpad pinch (ctrlKey usually set)
-      // Or just standard mouse wheel
       const speed = e.ctrlKey ? 0.01 : 0.002;
-
       setZoom((z) => Math.min(Math.max(z + delta * speed, 2), 19));
     };
 
@@ -892,23 +971,15 @@ const InteractiveMap = ({ memories, onNavigate }) => {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
     };
-  }, [project, unproject]); // Dependencies for project/unproject mostly static
+  }, [project, unproject]);
 
   // --- Rendering ---
-
-  // Helper to generate tiles for a specific zoom level
   const getTilesForZoom = useCallback(
     (targetZoom) => {
       if (dimensions.width === 0) return [];
 
-      // KORREKTUR: Math.round sorgt dafür, dass wir eher runter-skalieren (scharf)
-      // als hoch-skalieren (unscharf)
       const tileZoom = Math.round(targetZoom);
-
-      // Scale factor berechnen. Wenn targetZoom 5.9 ist, tileZoom 6.
-      // Scale = 2^(5.9 - 6) = 2^(-0.1) = ~0.93 (verkleinert -> scharf)
       const scale = Math.pow(2, zoom - tileZoom);
-
       const centerPxInt = project(center.lat, center.lng, tileZoom);
 
       const viewLeftInt = centerPxInt.x - dimensions.width / 2 / scale;
@@ -939,7 +1010,7 @@ const InteractiveMap = ({ memories, onNavigate }) => {
               top: top,
               width: Math.ceil(TILE_SIZE * scale),
               height: Math.ceil(TILE_SIZE * scale),
-              transform: "translate3d(0,0,0)", // HWA
+              transform: "translate3d(0,0,0)",
               backfaceVisibility: "hidden",
             },
           });
@@ -950,35 +1021,93 @@ const InteractiveMap = ({ memories, onNavigate }) => {
     [center, zoom, dimensions, project]
   );
 
-  // Primary layer (current integer zoom)
   const primaryTiles = useMemo(
     () => getTilesForZoom(zoom),
     [getTilesForZoom, zoom]
   );
-
-  // Fallback layer (zoom - 1) to prevent flickering when zooming in/out
   const fallbackTiles = useMemo(() => {
-    // Use integer zoom for fallback as well to match grid
     const z = Math.round(zoom) - 1;
     return z >= 0 ? getTilesForZoom(z) : [];
   }, [getTilesForZoom, zoom]);
 
-  const markers = locationData.mapped.map((loc, i) => {
-    const markerPx = project(loc.lat, loc.lng, zoom);
-    let deltaX = markerPx.x - centerPx.x;
-    while (deltaX > worldWidth / 2) deltaX -= worldWidth;
-    while (deltaX < -worldWidth / 2) deltaX += worldWidth;
-    const x = dimensions.width / 2 + deltaX;
-    const y = markerPx.y - (centerPx.y - dimensions.height / 2);
+  // --- CLUSTERING LOGIC ---
+  const clusteredMarkers = useMemo(() => {
+    if (dimensions.width === 0) return [];
 
-    if (
-      x < -200 ||
-      x > dimensions.width + 200 ||
-      y < -200 ||
-      y > dimensions.height + 200
-    )
-      return null;
+    // 1. Calculate pixel positions for all mapped items
+    const points = locationData.mapped
+      .map((item) => {
+        const px = project(item.lat, item.lng, zoom);
+        // Normalize X for world wrap
+        let deltaX = px.x - centerPx.x;
+        const worldWidth = 256 * Math.pow(2, zoom);
+        while (deltaX > worldWidth / 2) deltaX -= worldWidth;
+        while (deltaX < -worldWidth / 2) deltaX += worldWidth;
 
+        const x = dimensions.width / 2 + deltaX;
+        const y = px.y - (centerPx.y - dimensions.height / 2);
+
+        return { ...item, x, y };
+      })
+      .filter(
+        (p) =>
+          p.x > -100 &&
+          p.x < dimensions.width + 100 &&
+          p.y > -100 &&
+          p.y < dimensions.height + 100
+      );
+
+    // 2. Greedy clustering
+    const clusters = [];
+    const CLUSTER_RADIUS = 60; // Pixels distance to merge
+
+    points.forEach((point) => {
+      // Find an existing cluster that is close enough
+      const cluster = clusters.find((c) => {
+        const dx = c.x - point.x;
+        const dy = c.y - point.y;
+        return Math.sqrt(dx * dx + dy * dy) < CLUSTER_RADIUS;
+      });
+
+      if (cluster) {
+        cluster.memories.push(point.memory);
+        // Average the position slightly towards new point (optional, keeps cluster stable if we don't)
+        // For stability, we often keep the first point's position or average.
+        // Let's keep first point to avoid jumping
+      } else {
+        clusters.push({
+          x: point.x,
+          y: point.y,
+          lat: point.lat,
+          lng: point.lng,
+          name: point.displayName, // Use display name of first item
+          memories: [point.memory],
+        });
+      }
+    });
+
+    // Sort memories inside clusters by date
+    clusters.forEach((c) => {
+      c.memories.sort((a, b) => getDateObj(b.date) - getDateObj(a.date));
+      c.count = c.memories.length;
+
+      // Collect unique locations
+      const locs = new Set(c.memories.map((m) => m.location).filter(Boolean));
+      c.uniqueLocations = Array.from(locs);
+
+      // Use the location name of the newest entry for the cluster label
+      // if distinct
+      if (c.count === 1) {
+        c.name = c.memories[0].location;
+      } else {
+        c.name = `${c.count} Stories`;
+      }
+    });
+
+    return clusters;
+  }, [locationData.mapped, zoom, centerPx, dimensions, project]);
+
+  const markers = clusteredMarkers.map((loc, i) => {
     const latestMemory = loc.memories[0];
     const thumbUrl =
       latestMemory.previewImage ||
@@ -989,9 +1118,9 @@ const InteractiveMap = ({ memories, onNavigate }) => {
 
     return (
       <MapMarker
-        key={`${i}-${loc.name}`}
-        x={x}
-        y={y}
+        key={`${i}-${loc.name}-${count}`}
+        x={loc.x}
+        y={loc.y}
         loc={loc}
         isSelected={selectedLoc === loc}
         onClick={(e) => {
@@ -1005,8 +1134,9 @@ const InteractiveMap = ({ memories, onNavigate }) => {
               selectedLoc === loc ? "scale-125 z-50" : "hover:scale-110 z-20"
             }`}
           >
+            {/* Cluster Backing Effect for multiple items */}
             {count > 1 && (
-              <div className="absolute top-[-4px] left-1/2 -translate-x-1/2 w-10 h-10 bg-white rounded-full shadow-md border-2 border-white opacity-60 z-0"></div>
+              <div className="absolute top-[-6px] left-1/2 -translate-x-1/2 w-10 h-10 bg-white rounded-full shadow-sm border border-slate-200 z-[-1] scale-110"></div>
             )}
             <div
               className={`relative z-10 w-12 h-12 rounded-full border-4 shadow-lg overflow-hidden bg-white ${
@@ -1028,7 +1158,7 @@ const InteractiveMap = ({ memories, onNavigate }) => {
               )}
             </div>
             {count > 1 && (
-              <div className="absolute -top-2 -right-2 bg-indigo-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-white shadow-sm z-20">
+              <div className="absolute -top-2 -right-2 bg-indigo-600 text-white text-[10px] font-bold w-6 h-6 flex items-center justify-center rounded-full border-2 border-white shadow-sm z-20">
                 {count}
               </div>
             )}
@@ -1048,11 +1178,9 @@ const InteractiveMap = ({ memories, onNavigate }) => {
         onClick={() => setSelectedLoc(null)}
       >
         <div ref={contentRef} className="absolute inset-0 w-full h-full">
-          {/* Render Fallback Layer First (Behind) */}
           {fallbackTiles.map((t) => (
             <MapTile key={`fb-${t.key}`} {...t} />
           ))}
-          {/* Render Primary Layer (Top) */}
           {primaryTiles.map((t) => (
             <MapTile key={t.key} {...t} />
           ))}
@@ -1060,7 +1188,6 @@ const InteractiveMap = ({ memories, onNavigate }) => {
           {markers}
         </div>
 
-        {/* ... controls & overlay ... */}
         <div className="absolute bottom-1 right-1 bg-white/70 px-1 text-[10px] text-slate-600 pointer-events-none z-10 rounded">
           © OpenStreetMap contributors
         </div>
@@ -1101,13 +1228,37 @@ const InteractiveMap = ({ memories, onNavigate }) => {
             className="absolute bottom-8 left-1/2 -translate-x-1/2 w-[90%] max-w-sm bg-white rounded-2xl shadow-2xl z-50 overflow-hidden animate-in slide-in-from-bottom-4 fade-in"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="bg-indigo-600 p-3 flex justify-between items-center text-white">
-              <div className="flex items-center gap-2 font-bold text-sm">
-                <MapPin size={16} /> {selectedLoc.name}
-              </div>
+            <div className="bg-indigo-600 p-3 flex justify-between items-start text-white shadow-md">
+              {selectedLoc.count > 1 ? (
+                <div className="flex-1">
+                  <div className="font-bold text-sm mb-1">
+                    {selectedLoc.count} Stories in dieser Region
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {selectedLoc.uniqueLocations.slice(0, 3).map((loc, idx) => (
+                      <span
+                        key={idx}
+                        className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded border border-white/10"
+                      >
+                        {loc}
+                      </span>
+                    ))}
+                    {selectedLoc.uniqueLocations.length > 3 && (
+                      <span className="text-[10px] opacity-80 self-center">
+                        +{selectedLoc.uniqueLocations.length - 3} weitere
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 font-bold text-sm">
+                  <MapPin size={16} className="flex-shrink-0" />
+                  <span className="line-clamp-1">{selectedLoc.name}</span>
+                </div>
+              )}
               <button
                 onClick={() => setSelectedLoc(null)}
-                className="hover:bg-indigo-700 rounded-full p-1"
+                className="hover:bg-indigo-700 rounded-full p-1 -mt-1 -mr-1 flex-shrink-0"
               >
                 <X size={16} />
               </button>
@@ -1140,6 +1291,8 @@ const InteractiveMap = ({ memories, onNavigate }) => {
                       <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
                         <Calendar size={10} />
                         <span>{formatDateSafe(mem.date)}</span>
+                        <span className="text-slate-300">|</span>
+                        <span>{mem.location}</span>
                       </div>
                     </div>
                     <ChevronRight size={16} className="text-slate-300" />
@@ -2545,6 +2698,7 @@ export default function App() {
   const [formData, setFormData] = useState({
     title: "",
     location: "",
+    address: "", // NEU: Genaue Adresse
     content: "",
     theme: "modern",
     accentColor: "indigo",
@@ -2739,6 +2893,7 @@ export default function App() {
     const initial = {
       title: "",
       location: "",
+      address: "",
       content: "",
       theme: "modern",
       accentColor: "indigo",
@@ -2785,6 +2940,7 @@ export default function App() {
       : [{ id: 1, type: "text", content: memory.content || "" }];
     const data = {
       ...memory,
+      address: memory.address || "", // Handle legacy data without address
       images: initialImages,
       blocks: editableBlocks,
       date: memory.date?.toDate
@@ -2872,6 +3028,7 @@ export default function App() {
       const payload = {
         title: currentData.title,
         location: currentData.location,
+        address: currentData.address || "", // Save Address
         date: new Date(currentData.date),
         endDate: currentData.endDate ? new Date(currentData.endDate) : null,
         author: user.displayName,
@@ -3124,8 +3281,16 @@ export default function App() {
                     </div>
                   </div>
                 </div>
+                <AddressAutocomplete
+                  label="Genaue Adresse (Optional, für Karte)"
+                  placeholder="z.B. Hasenweg 3 Germering (wird nicht angezeigt)"
+                  value={formData.address || ""}
+                  onChange={(e) =>
+                    setFormData({ ...formData, address: e.target.value })
+                  }
+                />
                 <Input
-                  label="Ort"
+                  label="Ort (Wird angezeigt)"
                   value={formData.location}
                   onChange={(e) =>
                     setFormData({ ...formData, location: e.target.value })
