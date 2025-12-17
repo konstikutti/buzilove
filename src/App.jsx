@@ -1249,6 +1249,7 @@ const BlockItem = React.memo(
               className="absolute left-2 top-1.5 text-slate-400"
             />
           </div>
+          {/* ... */}
           {(["header", "text", "quote", "note"].includes(block.type) ||
             (block.type === "image" &&
               (block.layout === "left" || block.layout === "right"))) && (
@@ -2184,6 +2185,12 @@ const MemoryCard = ({ memory, onClick }) => {
 };
 
 const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
+  // --- SCROLL FIX START ---
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+  // --- SCROLL FIX END ---
+
   const [hydratedImages, setHydratedImages] = useState(() =>
     new Array(memory.images?.length || 0).fill(null)
   );
