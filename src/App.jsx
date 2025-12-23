@@ -1900,7 +1900,7 @@ const ImageManager = ({ images, onChange, coverImage, onSetCover }) => {
             <span className="text-xs font-bold text-indigo-600 animate-pulse">
               Verarbeite Bild {progress}...
             </span>
-            <span className="text-[10px] text-slate-400 mt-1">
+            <span className="text-slate-400 text-[10px] mt-1">
               Bitte warten...
             </span>
           </div>
@@ -2419,8 +2419,18 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
     let isMounted = true;
     if (!memory.images || memory.images.length === 0) return;
 
+    // --- NEW LOGIC: Determine correct Hero Index for priority ---
+    let heroIdx = 0;
+    if (memory.coverImageId && memory.images) {
+      const idx = memory.images.indexOf(memory.coverImageId);
+      if (idx !== -1) heroIdx = idx;
+    }
+
     const priorityIndices = new Set();
-    if (memory.images.length > 0) priorityIndices.add(0);
+    // 1. Always prioritize the Hero/Cover Image first
+    if (memory.images.length > 0) priorityIndices.add(heroIdx);
+
+    // 2. Scan blocks sequentially to build a reading-order priority list
     memory.blocks?.forEach((block) => {
       const checkForRef = (content) => {
         if (typeof content === "string" && content.startsWith("IMG_REF_")) {
@@ -2429,6 +2439,8 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
             priorityIndices.add(idx);
         }
       };
+      // For image-pair, we check content (left) then content2 (right).
+      // Since Set maintains insertion order, this ensures correct sequence.
       checkForRef(block.content);
       checkForRef(block.content2);
     });
@@ -2453,7 +2465,14 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
     };
 
     const loadAll = async () => {
-      await Promise.all(priorityList.map(loadIndex));
+      // PRIORITY LOADING: Strictly sequential to ensure reading flow smoothness.
+      // "Erst das erste, dann das zweite..."
+      for (const idx of priorityList) {
+        if (!isMounted) return;
+        await loadIndex(idx);
+      }
+
+      // BACKGROUND LOADING: Can be slightly more relaxed, but still batched to avoid clogging.
       for (const idx of backgroundList) {
         if (!isMounted) return;
         await loadIndex(idx);
