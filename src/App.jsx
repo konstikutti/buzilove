@@ -314,10 +314,8 @@ const dehydrateBlocks = (blocks, images) => {
     };
     if (block.type === "image" || block.type === "image-pair") {
       // FIX: Removed length check to support short PENDING_REFs
-      if (block.content)
-        newBlock.content = makeRef(block.content);
-      if (block.content2)
-        newBlock.content2 = makeRef(block.content2);
+      if (block.content) newBlock.content = makeRef(block.content);
+      if (block.content2) newBlock.content2 = makeRef(block.content2);
     }
     return newBlock;
   });
