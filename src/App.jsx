@@ -313,9 +313,10 @@ const dehydrateBlocks = (blocks, images) => {
       return content;
     };
     if (block.type === "image" || block.type === "image-pair") {
-      if (block.content && block.content.length > 100)
+      // FIX: Removed length check to support short PENDING_REFs
+      if (block.content)
         newBlock.content = makeRef(block.content);
-      if (block.content2 && block.content2.length > 100)
+      if (block.content2)
         newBlock.content2 = makeRef(block.content2);
     }
     return newBlock;
@@ -3002,6 +3003,19 @@ export default function App() {
     const editableBlocks = memory.blocks
       ? hydrateBlocks(memory.blocks, initialImages)
       : [{ id: 1, type: "text", content: memory.content || "" }];
+
+    // --- FIX START ---
+    let currentCover = memory.coverImage || "";
+    // Wenn eine coverImageId existiert, versuche das passende Bild in den initialImages zu finden.
+    // Das stellt sicher, dass der Stern im Editor beim richtigen Bild angezeigt wird.
+    if (memory.coverImageId && memory.images) {
+      const coverIndex = memory.images.indexOf(memory.coverImageId);
+      if (coverIndex !== -1 && initialImages[coverIndex]) {
+        currentCover = initialImages[coverIndex].url;
+      }
+    }
+    // --- FIX END ---
+
     const data = {
       ...memory,
       address: memory.address || "", // Handle legacy data without address
@@ -3015,7 +3029,7 @@ export default function App() {
           ? memory.endDate.toDate().toISOString().split("T")[0]
           : memory.endDate
         : "",
-      coverImage: memory.coverImage || "",
+      coverImage: currentCover,
     };
     setFormData(data);
     setOriginalData(data);
