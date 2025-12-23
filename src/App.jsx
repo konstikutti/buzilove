@@ -2087,6 +2087,7 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
                   <div className={isSideLayout ? "w-full md:w-1/2" : "w-full"}>
                     <figure>
                       <img
+                        key={b.content}
                         src={b.content}
                         className={imgStyle}
                         style={{ objectPosition: b.focus || "50% 50%" }}
@@ -2122,6 +2123,7 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
           {b.type === "image-pair" && (
             <div className="grid grid-cols-2 gap-4 my-8 clear-both">
               <img
+                key={b.content}
                 src={b.content || "https://via.placeholder.com/400"}
                 className={`w-full aspect-[4/3] object-cover ${
                   b.imgStyle === "circle"
@@ -2132,6 +2134,7 @@ const BlockRenderer = ({ blocks, theme, accentHex }) => {
                 onError={(e) => (e.target.style.display = "none")}
               />
               <img
+                key={b.content2}
                 src={b.content2 || "https://via.placeholder.com/400"}
                 className={`w-full aspect-[4/3] object-cover ${
                   b.imgStyle === "circle"
