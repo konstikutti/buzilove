@@ -324,6 +324,25 @@ const dehydrateBlocks = (blocks, images) => {
 
 // --- BASE COMPONENTS ---
 
+// Helper Hook for Debounce
+const useDebounce = (callback, delay) => {
+  const timeoutRef = useRef(null);
+
+  const debouncedCallback = useCallback(
+    (...args) => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      timeoutRef.current = setTimeout(() => {
+        callback(...args);
+      }, delay);
+    },
+    [callback, delay]
+  );
+
+  return debouncedCallback;
+};
+
 const Toast = ({ message, type, onClose }) => {
   useEffect(() => {
     const timer = setTimeout(onClose, 3000);
@@ -391,49 +410,50 @@ const Button = ({
   );
 };
 
-const LazyInput = ({ value, onChange, ...props }) => {
+// FIX: New Debounced Components to solve lag and overwrite issues simultaneously
+const DebouncedInput = ({ value, onChange, ...props }) => {
   const [localValue, setLocalValue] = useState(value || "");
+
   useEffect(() => {
     setLocalValue(value || "");
   }, [value]);
+
+  const debouncedUpdate = useDebounce((val) => {
+    onChange({ target: { value: val } });
+  }, 300);
+
   const handleChange = (e) => {
-    setLocalValue(e.target.value);
+    const val = e.target.value;
+    setLocalValue(val);
+    debouncedUpdate(val);
   };
-  const handleBlur = (e) => {
-    if (onChange && localValue !== value)
-      onChange({ target: { value: localValue } });
-  };
-  return (
-    <input
-      value={localValue}
-      onChange={handleChange}
-      onBlur={handleBlur}
-      {...props}
-    />
-  );
+
+  return <input value={localValue} onChange={handleChange} {...props} />;
 };
 
-const LazyTextarea = ({ value, onChange, ...props }) => {
+const DebouncedTextarea = ({ value, onChange, ...props }) => {
   const [localValue, setLocalValue] = useState(value || "");
+
   useEffect(() => {
     setLocalValue(value || "");
   }, [value]);
+
+  const debouncedUpdate = useDebounce((val) => {
+    onChange({ target: { value: val } });
+  }, 300);
+
   const handleChange = (e) => {
-    setLocalValue(e.target.value);
+    const val = e.target.value;
+    setLocalValue(val);
+    debouncedUpdate(val);
   };
-  const handleBlur = (e) => {
-    if (onChange && localValue !== value)
-      onChange({ target: { value: localValue } });
-  };
-  return (
-    <textarea
-      value={localValue}
-      onChange={handleChange}
-      onBlur={handleBlur}
-      {...props}
-    />
-  );
+
+  return <textarea value={localValue} onChange={handleChange} {...props} />;
 };
+
+// OLD: Kept for legacy if needed, but not used in BlockItem anymore
+const LazyInput = DebouncedInput;
+const LazyTextarea = DebouncedTextarea;
 
 const Input = ({
   label,
@@ -451,7 +471,7 @@ const Input = ({
       </label>
     )}
     {type === "text" && typeof onChange === "function" ? (
-      <LazyInput
+      <DebouncedInput
         name={name}
         type={type}
         value={value}
@@ -1541,7 +1561,7 @@ const BlockItem = React.memo(
         </div>
 
         {block.type === "header" && (
-          <LazyInput
+          <DebouncedInput
             value={block.content || ""}
             onChange={(e) => updateBlock(block.id, { content: e.target.value })}
             placeholder="Überschrift..."
@@ -1551,7 +1571,7 @@ const BlockItem = React.memo(
           />
         )}
         {block.type === "text" && (
-          <LazyTextarea
+          <DebouncedTextarea
             value={block.content || ""}
             onChange={(e) => updateBlock(block.id, { content: e.target.value })}
             placeholder="Erzähl die Story..."
@@ -1564,7 +1584,7 @@ const BlockItem = React.memo(
         )}
         {block.type === "quote" && (
           <div className="bg-slate-50 p-4 rounded border-l-4 border-indigo-200">
-            <LazyTextarea
+            <DebouncedTextarea
               value={block.content || ""}
               onChange={(e) =>
                 updateBlock(block.id, { content: e.target.value })
@@ -1585,7 +1605,7 @@ const BlockItem = React.memo(
         )}
         {block.type === "note" && (
           <div className="bg-amber-50 p-3 rounded border border-amber-100">
-            <LazyTextarea
+            <DebouncedTextarea
               value={block.content || ""}
               onChange={(e) =>
                 updateBlock(block.id, { content: e.target.value })
@@ -1625,7 +1645,7 @@ const BlockItem = React.memo(
                     <label className="text-[10px] text-slate-400 font-bold uppercase mb-1 block">
                       Text daneben (mittig)
                     </label>
-                    <LazyTextarea
+                    <DebouncedTextarea
                       value={block.sideText || ""}
                       onChange={(e) =>
                         updateBlock(block.id, { sideText: e.target.value })
@@ -1639,7 +1659,7 @@ const BlockItem = React.memo(
                     />
                   </div>
                 )}
-                <LazyInput
+                <DebouncedInput
                   value={block.caption || ""}
                   onChange={(e) =>
                     updateBlock(block.id, { caption: e.target.value })
@@ -2349,9 +2369,22 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
   }, []);
   // --- SCROLL FIX END ---
 
-  const [hydratedImages, setHydratedImages] = useState(() =>
-    new Array(memory.images?.length || 0).fill(null)
-  );
+  // CHANGE 1: Initialisiere hydratedImages mit Daten-URLs, falls vorhanden,
+  // um das Flackern/Verschwinden des Titelbildes beim Laden zu verhindern.
+  const [hydratedImages, setHydratedImages] = useState(() => {
+    if (!memory.images) return [];
+    return memory.images.map((img) => {
+      // Wenn es bereits ein Base64-String oder eine URL ist, direkt verwenden
+      if (
+        typeof img === "string" &&
+        (img.startsWith("data:") || img.startsWith("http"))
+      ) {
+        return img;
+      }
+      return null;
+    });
+  });
+
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [activeImg, setActiveImg] = useState(0);
   const [loadedCount, setLoadedCount] = useState(0);
@@ -2403,6 +2436,9 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
     const backgroundList = allIndices.filter((i) => !priorityIndices.has(i));
 
     const loadIndex = async (index) => {
+      // Wenn das Bild schon beim Start geladen wurde (siehe useState oben), überspringe den Fetch
+      if (hydratedImages[index]) return;
+
       const url = await fetchSingleImage(memory.images[index]);
       if (isMounted && url) {
         setHydratedImages((prev) => {
@@ -2453,9 +2489,19 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
     }
     return start;
   };
+
+  // CHANGE 2: Determine correct hero image index based on coverImageId
+  const heroIndex = useMemo(() => {
+    if (memory.coverImageId && memory.images) {
+      const idx = memory.images.indexOf(memory.coverImageId);
+      return idx !== -1 ? idx : 0;
+    }
+    return 0;
+  }, [memory.coverImageId, memory.images]);
+
   const currentHeroImage =
-    hydratedImages.length > 0 && hydratedImages[0]
-      ? hydratedImages[0]
+    hydratedImages.length > 0 && hydratedImages[heroIndex]
+      ? hydratedImages[heroIndex]
       : memory.previewImage || "";
 
   return (
@@ -2534,15 +2580,22 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
       >
         {currentHeroImage ? (
           <div
-            className="relative w-full h-full group cursor-zoom-in"
+            className="relative w-full h-full group cursor-zoom-in overflow-hidden"
             onClick={() => setIsLightboxOpen(true)}
           >
+            {/* FIX: Placeholder background to prevent flickering */}
+            {memory.previewImage && (
+              <div
+                className="absolute inset-0 bg-cover bg-center"
+                style={{ backgroundImage: `url(${memory.previewImage})` }}
+              />
+            )}
             <img
               src={currentHeroImage}
-              className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+              className="relative z-10 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
             />
             {hydratedImages.length > 0 && (
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100 z-20">
                 <div className="bg-white/20 backdrop-blur-md p-3 rounded-full text-white">
                   <Maximize2 size={32} />
                 </div>
@@ -2554,7 +2607,7 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
             <ImageIcon className="text-slate-300" size={64} />
           </div>
         )}
-        <div className="absolute top-0 left-0 right-0 p-6 flex justify-between z-10 bg-gradient-to-b from-black/50 to-transparent pointer-events-none">
+        <div className="absolute top-0 left-0 right-0 p-6 flex justify-between z-30 bg-gradient-to-b from-black/50 to-transparent pointer-events-none">
           <div className="pointer-events-auto">
             <Button
               variant="ghost"
@@ -2578,7 +2631,7 @@ const MemoryDetail = ({ memory, onBack, onEdit, isAuthor }) => {
           </div>
         </div>
         {isHeroFull && (
-          <div className="absolute bottom-0 w-full p-12 bg-gradient-to-t from-black/80 to-transparent pointer-events-none">
+          <div className="absolute bottom-0 w-full p-12 bg-gradient-to-t from-black/80 to-transparent pointer-events-none z-20">
             <div className="max-w-4xl mx-auto text-white">
               <h1 className="text-5xl font-bold mb-2">{memory.title}</h1>
               <div className="flex gap-4 opacity-80">
@@ -2782,12 +2835,18 @@ export default function App() {
 
   useEffect(() => {
     if (view === "editor") {
-      const draftKey = editingId ? `buzi_draft_${editingId}` : "buzi_draft_new";
-      try {
-        localStorage.setItem(draftKey, JSON.stringify(formData));
-      } catch (e) {
-        console.warn("Local storage full, skipping auto-save");
-      }
+      // FIX: Debounce saving to avoid input lag
+      const timer = setTimeout(() => {
+        const draftKey = editingId
+          ? `buzi_draft_${editingId}`
+          : "buzi_draft_new";
+        try {
+          localStorage.setItem(draftKey, JSON.stringify(formData));
+        } catch (e) {
+          console.warn("Local storage full, skipping auto-save");
+        }
+      }, 1000);
+      return () => clearTimeout(timer);
     }
   }, [formData, view, editingId]);
 
@@ -3005,13 +3064,15 @@ export default function App() {
       }
 
       const imageIds = [];
+      let savedCoverImageId = null; // CHANGE 1: Track the ID of the cover image
+
       for (const imgObj of currentData.images) {
         const isObj = typeof imgObj === "object";
         const existingId = isObj ? imgObj.id : null;
         const dataUrl = isObj ? imgObj.url : imgObj;
-        if (existingId) {
-          imageIds.push(existingId);
-        } else if (dataUrl && dataUrl.startsWith("data:")) {
+        let finalId = existingId;
+
+        if (!finalId && dataUrl && dataUrl.startsWith("data:")) {
           const assetDoc = await addDoc(
             collection(
               db,
@@ -3023,9 +3084,18 @@ export default function App() {
             ),
             { imageData: dataUrl, createdAt: serverTimestamp() }
           );
-          imageIds.push(assetDoc.id);
+          finalId = assetDoc.id;
+        }
+
+        if (finalId) {
+          imageIds.push(finalId);
+          // Check if this image matches the selected cover image URL
+          if (dataUrl === currentData.coverImage) {
+            savedCoverImageId = finalId;
+          }
         }
       }
+
       const savedBlocks = dehydrateBlocks(
         currentData.blocks,
         currentData.images
@@ -3043,6 +3113,7 @@ export default function App() {
         heroStyle: currentData.heroStyle,
         images: imageIds,
         previewImage: previewImage,
+        coverImageId: savedCoverImageId, // CHANGE 1: Save the cover image ID
         blocks: savedBlocks,
         updatedAt: serverTimestamp(),
       };
